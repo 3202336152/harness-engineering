@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify skill package
+        run: bash scripts/verify-spec-compliance.sh
+
+      - name: Run shell tests
+        run: bash tests/run-tests.sh

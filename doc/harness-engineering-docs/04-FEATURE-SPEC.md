@@ -1,0 +1,371 @@
+# 04 -- 功能规格
+
+> Harness Engineering Skill | 版本 1.0
+
+---
+
+## 1. 命令概览
+
+| 命令 | 触发方式 | 作用 | Phase |
+|------|----------|------|-------|
+| `/harness init` | 手动或自动触发 | 在项目中初始化 Harness 结构 | 1 |
+| `/harness audit` | 手动或自动触发 | 审计项目 Harness 健康度 | 1 |
+| `/harness plan` | 手动触发 | 生成符合规范的执行计划 | 1 |
+
+---
+
+## 2. /harness init -- 初始化命令
+
+### 2.1 触发条件
+
+**手动触发:**
+- 用户输入 `/harness init`
+- 用户说 "初始化 Harness 结构"、"搭建项目环境"
+
+**自动触发（建议）:**
+- Agent 检测到项目没有 AGENTS.md 且用户要求 "开始开发" 类操作
+- Agent 被要求 "为 AI 代理优化项目环境"
+
+### 2.2 执行流程
+
+```
+步骤 1: 环境检测
+  ├── 检测 .git/ 目录
+  │   ├── 存在: 记录 IS_GIT=true
+  │   └── 不存在: 输出警告 "Not a git repository. Some features may be limited."
+  │               继续执行（不阻断）
+  ├── 检测已有文件
+  │   ├── AGENTS.md 存在 && !--force: 标记为 skip
+  │   ├── CLAUDE.md 存在 && !--force: 标记为 skip
+  │   └── docs/*.md 存在 && !--force: 各自标记为 skip
+  └── 检测技术栈
+      ├── package.json     -> STACK=node
+      ├── pyproject.toml   -> STACK=python
+      ├── setup.py         -> STACK=python
+      ├── go.mod           -> STACK=go
+      ├── Cargo.toml       -> STACK=rust
+      └── 以上都没有       -> STACK=unknown
+
+步骤 2: 创建目录
+  创建以下目录（mkdir -p，幂等）:
+  - docs/
+  - docs/design-docs/
+  - docs/exec-plans/active/
+  - docs/exec-plans/completed/
+  - docs/exec-plans/tech-debt/
+  - docs/product-specs/
+  - docs/references/
+  - .github/
+
+步骤 3: 生成文件
+  从 assets/templates/ 读取模板，替换占位符，写入目标路径:
+  ┌──────────────────────┬────────────────────────────────────┐
+  │ 模板                 │ 目标                               │
+  ├──────────────────────┼────────────────────────────────────┤
+  │ AGENTS.md.tpl        │ AGENTS.md                          │
+  │ CLAUDE.md.tpl        │ CLAUDE.md                          │
+  │ ARCHITECTURE.md.tpl  │ docs/ARCHITECTURE.md               │
+  │ CONVENTIONS.md.tpl   │ docs/CONVENTIONS.md                │
+  │ TESTING.md.tpl       │ docs/TESTING.md                    │
+  │ SECURITY.md.tpl      │ docs/SECURITY.md                   │
+  │ PR_TEMPLATE.md.tpl   │ .github/PULL_REQUEST_TEMPLATE.md   │
+  │ core-beliefs.md.tpl  │ docs/design-docs/core-beliefs.md   │
+  └──────────────────────┴────────────────────────────────────┘
+
+步骤 4: 输出报告
+  输出 JSON 到 stdout，包含:
+  - 创建了哪些文件
+  - 跳过了哪些文件
+  - 检测到的技术栈
+  - 下一步建议
+```
+
+### 2.3 参数说明
+
+| 参数 | 类型 | 必须 | 默认 | 说明 |
+|------|------|------|------|------|
+| `--project-name` | string | 否 | `basename $(pwd)` | 项目名称，填入模板 |
+| `--description` | string | 否 | `""` | 项目描述 |
+| `--force` | flag | 否 | false | 覆盖已有文件 |
+| `--dry-run` | flag | 否 | false | 仅打印操作，不实际执行 |
+
+### 2.4 输出格式
+
+```json
+{
+  "status": "success",
+  "project": "my-project",
+  "created_files": [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs/ARCHITECTURE.md",
+    "docs/CONVENTIONS.md",
+    "docs/TESTING.md",
+    "docs/SECURITY.md",
+    "docs/design-docs/core-beliefs.md",
+    ".github/PULL_REQUEST_TEMPLATE.md"
+  ],
+  "created_dirs": [
+    "docs",
+    "docs/design-docs",
+    "docs/exec-plans/active",
+    "docs/exec-plans/completed",
+    "docs/exec-plans/tech-debt",
+    "docs/product-specs",
+    "docs/references",
+    ".github"
+  ],
+  "skipped_files": [],
+  "detected_stack": "node",
+  "next_steps": [
+    "Edit AGENTS.md to add project-specific architecture details",
+    "Fill in docs/ARCHITECTURE.md with your system design",
+    "Define coding standards in docs/CONVENTIONS.md",
+    "Configure test commands in docs/TESTING.md",
+    "Add architecture linting to your CI pipeline"
+  ]
+}
+```
+
+### 2.5 Agent 后续行为
+
+init 脚本执行完毕后，Agent 应：
+1. 解析 JSON 输出
+2. 向用户报告创建了哪些文件和目录
+3. 列出 next_steps 作为建议
+4. 如果用户要求，帮助填充 AGENTS.md 和各 docs/ 文件的具体内容
+
+---
+
+## 3. /harness audit -- 审计命令
+
+### 3.1 触发条件
+
+**手动触发:**
+- 用户输入 `/harness audit`
+- 用户说 "检查 Harness 状态"、"项目健康检查"、"评估 Harness 成熟度"
+
+**自动触发（建议）:**
+- Agent 在 init 后建议运行 audit 以建立基线
+- Agent 在大型重构后建议运行 audit 验证 Harness 完整性
+
+### 3.2 审计维度详细说明
+
+#### 维度 1: 入口文档 (entry_document, 15%)
+
+**检查项:**
+
+| 检查 | 得分 | 说明 |
+|------|------|------|
+| AGENTS.md 或 CLAUDE.md 存在 | +40 | 基本存在性 |
+| 文件行数 <= 100 | +30 | 遵循 100 行原则 |
+| 文件行数 101-150 | +15 | 略超，可优化 |
+| 包含"快速命令"段落 | +10 | Agent 可立即执行 |
+| 包含"架构"段落 | +10 | Agent 了解结构 |
+| 包含"约束"段落 | +10 | Agent 知道限制 |
+
+#### 维度 2: 文档结构 (doc_structure, 15%)
+
+**检查项:**
+
+| 检查 | 得分 |
+|------|------|
+| docs/ARCHITECTURE.md 存在且有内容 (>5行) | +25 |
+| docs/CONVENTIONS.md 存在且有内容 | +25 |
+| docs/TESTING.md 存在且有内容 | +25 |
+| docs/SECURITY.md 存在且有内容 | +25 |
+
+#### 维度 3: 文档新鲜度 (doc_freshness, 10%)
+
+**检查项:**
+- 扫描 docs/ 下所有 .md 文件
+- 通过 git log 获取最后修改时间
+- 超过 30 天未修改标记为 stale
+- 得分 = (非 stale 文件数 / 总文件数) * 100
+
+#### 维度 4: 架构约束 (architecture_constraints, 15%)
+
+**检查项:**
+
+| 检查 | 得分 |
+|------|------|
+| 架构校验脚本存在 | +40 |
+| Linter 配置存在 | +20 |
+| CI 中有架构检查 | +20 |
+| ARCHITECTURE.md 中有约束描述 | +20 |
+
+#### 维度 5: 测试覆盖 (test_coverage, 15%)
+
+**检查项:**
+
+| 检查 | 得分 |
+|------|------|
+| 测试命令已配置 | +30 |
+| 测试目录/文件存在 | +30 |
+| CI 中有测试步骤 | +20 |
+| 覆盖率报告已配置 | +20 |
+
+#### 维度 6: 自动化 (automation, 10%)
+
+**检查项:**
+
+| 检查 | 得分 |
+|------|------|
+| CI 流水线存在 | +50 |
+| Pre-commit hooks 配置 | +30 |
+| PR 模板存在 | +20 |
+
+#### 维度 7: 执行计划 (exec_plans, 10%)
+
+**检查项:**
+
+| 检查 | 得分 |
+|------|------|
+| docs/exec-plans/ 目录存在 | +40 |
+| active/ 子目录存在 | +20 |
+| completed/ 子目录存在 | +20 |
+| 有 .md 计划文件 | +20 |
+
+#### 维度 8: 安全治理 (security_governance, 10%)
+
+**检查项:**
+
+| 检查 | 得分 |
+|------|------|
+| .env 在 .gitignore 中 | +30 |
+| SECURITY.md 存在 | +30 |
+| 其他敏感文件在 .gitignore | +20 |
+| CODEOWNERS 存在 | +20 |
+
+### 3.3 评分与成熟度映射
+
+```
+总分 = 各维度 (score * weight) 之和
+
+成熟度等级:
+  90-100 -> Level 4: Autonomous Harness
+  70-89  -> Level 3: Observable Harness
+  50-69  -> Level 2: Constrained Harness
+  25-49  -> Level 1: Basic Harness
+  0-24   -> Level 0: No Harness
+```
+
+### 3.4 输出格式
+
+完整 JSON 结构见 [02-ARCHITECTURE.md 6.2 节](./02-ARCHITECTURE.md#62-audit-harnesssh-接口)。
+
+### 3.5 Agent 后续行为
+
+audit 脚本执行完毕后，Agent 应：
+1. 解析 JSON 输出
+2. 展示总分和成熟度等级
+3. 按优先级列出改进建议
+4. 询问用户 "是否要我自动修复某些项？"
+5. 如果用户同意，按 priority_fixes 依次执行
+6. 执行完毕后建议重新运行 audit 验证改进
+
+---
+
+## 4. /harness plan -- 任务规划命令
+
+### 4.1 触发条件
+
+**手动触发:**
+- 用户输入 `/harness plan <任务描述>`
+- 用户说 "按 Harness 规范规划这个功能"
+
+### 4.2 执行流程
+
+```
+步骤 1: 收集上下文
+  ├── 读取 AGENTS.md 获取项目概览
+  ├── 读取 docs/ARCHITECTURE.md 获取架构信息
+  ├── 读取 docs/CONVENTIONS.md 获取编码规范
+  └── 读取 docs/TESTING.md 获取测试策略
+
+步骤 2: 生成执行计划
+  按以下模板生成:
+
+  # Execution Plan: <任务标题>
+
+  ## Status: Active
+  ## Created: <日期>
+  ## Agent: <当前 Agent 标识>
+
+  ## Objective
+  <从用户描述中提炼的明确目标>
+
+  ## Constraints
+  - Follow docs/ARCHITECTURE.md layered model
+  - Comply with docs/CONVENTIONS.md golden rules
+  - <从用户描述中提取的额外约束>
+
+  ## Acceptance Criteria
+  - [ ] All tests pass
+  - [ ] Type check passes
+  - [ ] Lint passes
+  - [ ] Architecture boundary check passes
+  - [ ] New functionality has test coverage > 80%
+  - [ ] Relevant docs updated
+  - [ ] <具体的功能验证步骤>
+
+  ## Implementation Steps
+
+  ### Phase 1: <数据层/基础设施>
+  - [ ] <具体步骤>
+  - [ ] <对应测试>
+
+  ### Phase 2: <服务层/业务逻辑>
+  - [ ] <具体步骤>
+  - [ ] <对应测试>
+
+  ### Phase 3: <UI层/集成>
+  - [ ] <具体步骤>
+  - [ ] <E2E测试>
+
+  ## Decision Log
+  - <日期>: <决策及理由>
+
+  ## Issues
+  - [None]
+
+步骤 3: 保存计划
+  写入 docs/exec-plans/active/<kebab-case-title>.md
+
+步骤 4: 展示计划
+  向用户展示完整计划，等待审核
+```
+
+### 4.3 注意事项
+
+- Phase 1 中 /harness plan 主要依赖 SKILL.md 中的内联指令
+- Phase 2 会增加 references/TASK-SPEC-FORMAT.md 提供更详细的格式规范
+- Agent 应根据项目的实际架构调整 Phase 分层（不一定是数据层/服务层/UI层）
+
+---
+
+## 5. 自动触发行为
+
+SKILL.md 的 description 中包含以下触发关键词：
+
+| 关键词类别 | 触发词 | 触发命令 |
+|------------|--------|----------|
+| 直接命令 | "harness", "/harness" | 根据上下文选择 |
+| 初始化 | "init project structure", "scaffold", "AGENTS.md" | init |
+| 审计 | "code audit", "project health", "harness maturity" | audit |
+| 约束 | "architecture constraints", "boundary check" | audit (聚焦架构维度) |
+| 熵 | "entropy management", "doc freshness" | audit (聚焦文档维度) |
+| 优化 | "optimize for AI agent" | init + audit |
+
+---
+
+## 6. 错误场景与处理
+
+| 场景 | 用户感知 | 处理方式 |
+|------|----------|----------|
+| 非 git 仓库执行 init | 收到警告但初始化成功 | 警告 + 继续 |
+| 无写入权限 | 收到错误报告 | JSON error + exit 1 |
+| init 时文件已存在 | 收到 skipped 列表 | 列出 skipped，建议 --force |
+| audit 在空项目运行 | 收到 Level 0 报告 | 所有维度 0 分 + 建议 init |
+| 模板文件缺失 | 收到部分成功报告 | 跳过缺失模板，报告 warning |
+| jq 不可用 | audit 仍输出 JSON | 脚本自身不依赖 jq，Agent 侧解析 |
