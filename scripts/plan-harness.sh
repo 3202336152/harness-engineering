@@ -38,7 +38,40 @@ EOF
 }
 
 slugify() {
-  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//'
+  local slug
+
+  slug="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  slug="${slug//$'\n'/-}"
+  slug="${slug//$'\r'/-}"
+  slug="${slug//$'\t'/-}"
+  slug="${slug// /-}"
+  slug="${slug//\//-}"
+  slug="${slug//\\/-}"
+  slug="${slug//:/-}"
+  slug="${slug//\?/-}"
+  slug="${slug//\*/-}"
+  slug="${slug//\"/-}"
+  slug="${slug//</-}"
+  slug="${slug//>/-}"
+  slug="${slug//|/-}"
+
+  while [[ "$slug" == *--* ]]; do
+    slug="${slug//--/-}"
+  done
+  while [[ "$slug" == -* ]]; do
+    slug="${slug#-}"
+  done
+  while [[ "$slug" == *- ]]; do
+    slug="${slug%-}"
+  done
+  while [[ "$slug" == .* ]]; do
+    slug="${slug#.}"
+  done
+  while [[ "$slug" == *. ]]; do
+    slug="${slug%.}"
+  done
+
+  printf '%s' "$slug"
 }
 
 parse_args() {
@@ -102,10 +135,10 @@ $AGENT
 Implement: $task
 
 ## Constraints
-- Follow docs/ARCHITECTURE.md layered model and dependency boundaries.
-- Comply with docs/CONVENTIONS.md golden rules and existing project patterns.
-- Use docs/TESTING.md as the verification baseline for new changes.
-- Update related docs when behavior or architecture changes.
+- Follow docs/project/ARCHITECTURE.md layered model and dependency boundaries.
+- Comply with docs/project/DEVELOPMENT.md and the project-level spec set.
+- Use docs/project/TESTING.md as the verification baseline for new changes.
+- Update the related feature spec files under docs/features/ when behavior or architecture changes.
 
 ## Acceptance Criteria
 - [ ] All relevant tests pass
@@ -146,7 +179,7 @@ output_report() {
   printf '"agent":"%s",' "$(json_escape "$AGENT")"
   printf '"dry_run":%s,' "$( [ "$DRY_RUN" -eq 1 ] && printf 'true' || printf 'false' )"
   printf '"references":'
-  append_array_json "docs/ARCHITECTURE.md" "docs/CONVENTIONS.md" "docs/TESTING.md"
+  append_array_json "docs/project/ARCHITECTURE.md" "docs/project/DEVELOPMENT.md" "docs/project/TESTING.md"
   printf '}\n'
 }
 

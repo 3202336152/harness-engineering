@@ -101,6 +101,182 @@ EOF
   touch tests/index.test.ts
 }
 
+seed_project_level_spec_project() {
+  mkdir -p docs/project docs/features/FEAT-010-checkout-rewrite .github/workflows scripts tests .harness
+  cat > AGENTS.md <<'EOF'
+# Sample Project
+
+## Quick Commands
+
+```bash
+npm test
+```
+
+## Architecture
+
+See docs/project/ARCHITECTURE.md.
+
+## Constraints
+
+Keep specs and docs updated.
+EOF
+  cat > docs/project/ARCHITECTURE.md <<'EOF'
+---
+id: project-architecture
+title: Project Architecture
+type: project-architecture
+status: active
+owner: team
+last_updated: 2026-04-07
+---
+
+# Project Architecture
+
+Boundary rules and layered model live here.
+EOF
+  cat > docs/project/DEVELOPMENT.md <<'EOF'
+---
+id: project-development
+title: Project Development
+type: project-development
+status: active
+owner: team
+last_updated: 2026-04-07
+---
+
+# Project Development
+
+Conventions and review expectations live here.
+EOF
+  cat > docs/project/TESTING.md <<'EOF'
+---
+id: project-testing
+title: Project Testing
+type: project-testing
+status: active
+owner: team
+last_updated: 2026-04-07
+---
+
+# Project Testing
+
+Use npm test and keep verification in CI.
+EOF
+  cat > docs/project/SECURITY.md <<'EOF'
+---
+id: project-security
+title: Project Security
+type: project-security
+status: active
+owner: team
+last_updated: 2026-04-07
+---
+
+# Project Security
+
+Security guidance lives here.
+EOF
+  cat > .harness/spec-policy.json <<'EOF'
+{
+  "project_docs": [
+    { "id": "architecture", "path": "docs/project/ARCHITECTURE.md", "required": true },
+    { "id": "development", "path": "docs/project/DEVELOPMENT.md", "required": true },
+    { "id": "testing", "path": "docs/project/TESTING.md", "required": true },
+    { "id": "security", "path": "docs/project/SECURITY.md", "required": true }
+  ],
+  "feature_spec": {
+    "base_dir": "docs/features",
+    "required_docs": ["overview.md", "design.md", "test-spec.md", "status.md"],
+    "change_type_docs": {
+      "api": ["api-spec.md"]
+    }
+  }
+}
+EOF
+  cat > docs/features/FEAT-010-checkout-rewrite/overview.md <<'EOF'
+---
+id: FEAT-010
+title: Checkout Rewrite
+type: feature-overview
+status: draft
+owner: alice
+change_types: "api"
+last_updated: 2026-04-07
+---
+
+# Feature Overview
+EOF
+  cat > docs/features/FEAT-010-checkout-rewrite/design.md <<'EOF'
+---
+id: FEAT-010
+title: Checkout Rewrite
+type: feature-design
+status: draft
+owner: alice
+change_types: "api"
+last_updated: 2026-04-07
+---
+
+# Feature Design
+EOF
+  cat > docs/features/FEAT-010-checkout-rewrite/test-spec.md <<'EOF'
+---
+id: FEAT-010
+title: Checkout Rewrite
+type: feature-test-spec
+status: draft
+owner: alice
+change_types: "api"
+last_updated: 2026-04-07
+---
+
+# Feature Test Spec
+EOF
+  cat > docs/features/FEAT-010-checkout-rewrite/status.md <<'EOF'
+---
+id: FEAT-010
+title: Checkout Rewrite
+type: feature-status
+status: draft
+owner: alice
+change_types: "api"
+last_updated: 2026-04-07
+---
+
+# Feature Status
+EOF
+  cat > docs/features/FEAT-010-checkout-rewrite/api-spec.md <<'EOF'
+---
+id: FEAT-010
+title: Checkout Rewrite
+type: feature-api-spec
+status: draft
+owner: alice
+change_types: "api"
+last_updated: 2026-04-07
+---
+
+# Feature API Spec
+EOF
+  cat > scripts/lint-architecture.sh <<'EOF'
+#!/bin/bash
+echo "ok"
+EOF
+  chmod +x scripts/lint-architecture.sh
+  cat > .github/workflows/ci.yml <<'EOF'
+name: CI
+jobs:
+  validate:
+    steps:
+      - run: bash scripts/lint-architecture.sh
+      - run: bash scripts/validate-spec.sh --json
+EOF
+  cat > package.json <<'EOF'
+{"name":"sample-project","scripts":{"test":"echo ok"}}
+EOF
+  touch tests/index.test.ts
+}
+
 describe "audit-harness.sh"
 
 it "reports level 0 for an empty project"
@@ -127,6 +303,19 @@ assert_success "$status" "audit command succeeds on full project"
 assert_json_number_gte "$output" ".overall_score" "80"
 assert_json_number_gte "$output" ".maturity_level" "3"
 assert_json_field "$output" ".dimensions.entry_document.score" "100"
+teardown_test_dir
+
+it "recognizes the v2 project-level spec structure"
+setup_test_dir
+init_git_repo
+seed_project_level_spec_project
+git add -A >/dev/null 2>&1
+git commit -m "seed project spec structure" --quiet >/dev/null 2>&1
+output=$(bash "$REPO_ROOT/scripts/audit-harness.sh" 2>&1)
+status=$?
+assert_success "$status" "audit command succeeds on project-level spec structure"
+assert_json_number_gte "$output" ".dimensions.doc_structure.score" "75"
+assert_json_number_gte "$output" ".dimensions.architecture_constraints.score" "60"
 teardown_test_dir
 
 print_summary

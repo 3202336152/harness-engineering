@@ -1,13 +1,11 @@
-# Testing Strategy
+# 测试策略
 
-## Commands
+兼容旧版 harness 流程的入口文档。
+
+当前项目级测试规范的主入口位于 `docs/project/TESTING.md`。
+
+## 测试命令
 
 ```bash
 {{TEST_COMMAND}}
 ```
-
-## Guidelines
-
-- Test behavior, not implementation details.
-- Add coverage for new public behavior.
-- Keep test output machine-readable when possible.

@@ -1,21 +1,13 @@
-# Architecture
+# 架构说明
 
-> {{PROJECT_NAME}} architecture notes.
+兼容旧版 harness 流程的入口文档。
 
-## System Overview
+当前项目级架构规范的主入口位于 `docs/project/ARCHITECTURE.md`。
 
-Describe the major moving parts of the system.
+## 分层模型
 
-## Layered Model
-
-Recommended dependency flow:
+建议依赖方向：
 
 ```text
 Types -> Config -> Repo -> Service -> Runtime -> UI
 ```
-
-## Dependency Rules
-
-- Dependencies flow one way.
-- Boundary violations should be caught in CI.
-- Cross-domain communication should go through explicit interfaces.

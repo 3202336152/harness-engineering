@@ -4,12 +4,26 @@ set -euo pipefail
 
 PROJECT_NAME="$(basename "$(pwd)")"
 DESCRIPTION="TODO: Add project description."
+OWNER="team"
 FORCE=0
 DRY_RUN=0
 STACK="unknown"
 IS_GIT=0
+TODAY="$(date +%F)"
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-TEMPLATES_DIR="$SKILL_DIR/assets/templates"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DEFAULT_TEMPLATES_DIR="$SKILL_DIR/assets/templates"
+USER_TEMPLATE_ROOT="${HARNESS_TEMPLATE_ROOT:-}"
+TEMPLATE_PACK_NAME="${TEMPLATE_PACK_NAME_DEFAULT:-harness-engineering-default}"
+TEMPLATE_VERSION="${TEMPLATE_VERSION_DEFAULT:-1.1.0}"
+TEMPLATE_LANGUAGE="${TEMPLATE_LANGUAGE_DEFAULT:-zh-CN}"
+TEMPLATE_PROFILE=""
+PROFILE_DESCRIPTION=""
+
+# shellcheck source=scripts/lib/template-resolver.sh
+. "$SCRIPT_DIR/lib/template-resolver.sh"
+# shellcheck source=scripts/lib/template-profile.sh
+. "$SCRIPT_DIR/lib/template-profile.sh"
 
 CREATED_FILES=()
 CREATED_DIRS=()
@@ -57,7 +71,7 @@ append_tracked_array_json() {
 
 usage() {
   cat <<'EOF'
-Usage: init-harness.sh [--project-name <name>] [--description <text>] [--force] [--dry-run]
+Usage: init-harness.sh [--project-name <name>] [--description <text>] [--template-root <path>] [--profile <name>] [--force] [--dry-run]
 EOF
 }
 
@@ -70,6 +84,14 @@ parse_args() {
         ;;
       --description)
         DESCRIPTION="${2:-}"
+        shift 2
+        ;;
+      --template-root)
+        USER_TEMPLATE_ROOT="${2:-}"
+        shift 2
+        ;;
+      --profile)
+        TEMPLATE_PROFILE="${2:-}"
         shift 2
         ;;
       --force)
@@ -101,6 +123,10 @@ detect_environment() {
 
   if [ -f package.json ]; then
     STACK="node"
+  elif [ -f pom.xml ]; then
+    STACK="java-maven"
+  elif [ -f build.gradle ] || [ -f build.gradle.kts ]; then
+    STACK="java-gradle"
   elif [ -f pyproject.toml ] || [ -f setup.py ]; then
     STACK="python"
   elif [ -f go.mod ]; then
@@ -110,6 +136,11 @@ detect_environment() {
   else
     STACK="unknown"
   fi
+
+  if [ -z "$TEMPLATE_PROFILE" ]; then
+    TEMPLATE_PROFILE="$(default_template_profile_for_stack "$STACK")"
+  fi
+  PROFILE_DESCRIPTION="$(describe_template_profile "$TEMPLATE_PROFILE")"
 }
 
 stack_commands() {
@@ -122,6 +153,24 @@ npm test             # Run tests
 npm run lint         # Run lint checks
 npm run typecheck    # Run type checks
 npm run build        # Build project
+EOF
+      ;;
+    java-maven)
+      cat <<'EOF'
+./mvnw clean compile              # Compile project
+./mvnw spring-boot:run            # Start local application
+./mvnw clean test                 # Run tests
+./mvnw spotless:apply             # Format code
+./mvnw -DskipTests package        # Build package
+EOF
+      ;;
+    java-gradle)
+      cat <<'EOF'
+./gradlew classes                 # Compile project
+./gradlew bootRun                 # Start local application
+./gradlew clean test              # Run tests
+./gradlew spotlessApply           # Format code
+./gradlew build                   # Build package
 EOF
       ;;
     python)
@@ -161,6 +210,8 @@ EOF
 test_command() {
   case "$STACK" in
     node) printf 'npm test' ;;
+    java-maven) printf './mvnw clean test' ;;
+    java-gradle) printf './gradlew clean test' ;;
     python) printf 'python -m pytest' ;;
     go) printf 'go test ./...' ;;
     rust) printf 'cargo test' ;;
@@ -172,6 +223,9 @@ create_directories() {
   local dir
   for dir in \
     docs \
+    docs/project \
+    docs/features \
+    docs/decisions \
     docs/design-docs \
     docs/exec-plans/active \
     docs/exec-plans/completed \
@@ -192,25 +246,33 @@ create_directories() {
 }
 
 render_template() {
-  local template_file="$1"
+  local logical_template="$1"
   local target_file="$2"
   local content=""
+  local template_file=""
 
   if [ -f "$target_file" ] && [ "$FORCE" -ne 1 ]; then
     SKIPPED_FILES+=("$target_file")
     return 0
   fi
 
-  if [ ! -f "$template_file" ]; then
-    printf 'Warning: Missing template %s\n' "$template_file" >&2
+  if ! template_file="$(resolve_template_file "$logical_template")"; then
+    printf 'Warning: Missing template %s\n' "$logical_template" >&2
     return 0
   fi
 
   content="$(cat "$template_file")"
   content="${content//'{{PROJECT_NAME}}'/$PROJECT_NAME}"
   content="${content//'{{DESCRIPTION}}'/$DESCRIPTION}"
+  content="${content//'{{OWNER}}'/$OWNER}"
+  content="${content//'{{DATE}}'/$TODAY}"
   content="${content//'{{STACK_COMMANDS}}'/$(stack_commands)}"
   content="${content//'{{TEST_COMMAND}}'/$(test_command)}"
+  content="${content//'{{TEMPLATE_PACK_NAME}}'/$TEMPLATE_PACK_NAME}"
+  content="${content//'{{TEMPLATE_VERSION}}'/$TEMPLATE_VERSION}"
+  content="${content//'{{TEMPLATE_PROFILE}}'/$TEMPLATE_PROFILE}"
+  content="${content//'{{TEMPLATE_LANGUAGE}}'/$TEMPLATE_LANGUAGE}"
+  content="${content//'{{PROFILE_DESCRIPTION}}'/$PROFILE_DESCRIPTION}"
 
   if [ "$DRY_RUN" -eq 0 ]; then
     printf '%s\n' "$content" > "$target_file"
@@ -219,15 +281,24 @@ render_template() {
 }
 
 generate_files() {
-  render_template "$TEMPLATES_DIR/AGENTS.md.tpl" "AGENTS.md"
-  render_template "$TEMPLATES_DIR/CLAUDE.md.tpl" "CLAUDE.md"
-  render_template "$TEMPLATES_DIR/ARCHITECTURE.md.tpl" "docs/ARCHITECTURE.md"
-  render_template "$TEMPLATES_DIR/CONVENTIONS.md.tpl" "docs/CONVENTIONS.md"
-  render_template "$TEMPLATES_DIR/TESTING.md.tpl" "docs/TESTING.md"
-  render_template "$TEMPLATES_DIR/SECURITY.md.tpl" "docs/SECURITY.md"
-  render_template "$TEMPLATES_DIR/PR_TEMPLATE.md.tpl" ".github/PULL_REQUEST_TEMPLATE.md"
-  render_template "$TEMPLATES_DIR/core-beliefs.md.tpl" "docs/design-docs/core-beliefs.md"
-  render_template "$TEMPLATES_DIR/architecture.json.tpl" ".harness/architecture.json"
+  render_template "AGENTS.md.tpl" "AGENTS.md"
+  render_template "CLAUDE.md.tpl" "CLAUDE.md"
+  render_template "ARCHITECTURE.md.tpl" "docs/ARCHITECTURE.md"
+  render_template "CONVENTIONS.md.tpl" "docs/CONVENTIONS.md"
+  render_template "TESTING.md.tpl" "docs/TESTING.md"
+  render_template "SECURITY.md.tpl" "docs/SECURITY.md"
+  render_template "project/ARCHITECTURE.md.tpl" "docs/project/ARCHITECTURE.md"
+  render_template "project/DESIGN.md.tpl" "docs/project/DESIGN.md"
+  render_template "project/API-SPEC.md.tpl" "docs/project/API-SPEC.md"
+  render_template "project/DEVELOPMENT.md.tpl" "docs/project/DEVELOPMENT.md"
+  render_template "project/REQUIREMENTS.md.tpl" "docs/project/REQUIREMENTS.md"
+  render_template "project/TESTING.md.tpl" "docs/project/TESTING.md"
+  render_template "project/SECURITY.md.tpl" "docs/project/SECURITY.md"
+  render_template "PR_TEMPLATE.md.tpl" ".github/PULL_REQUEST_TEMPLATE.md"
+  render_template "core-beliefs.md.tpl" "docs/design-docs/core-beliefs.md"
+  render_template "architecture.json.tpl" ".harness/architecture.json"
+  render_template "spec-policy.json.tpl" ".harness/spec-policy.json"
+  render_template "doc-impact-rules.json.tpl" ".harness/doc-impact-rules.json"
 }
 
 output_report() {
@@ -247,15 +318,18 @@ output_report() {
   printf '"next_steps":'
   append_array_json \
     "Edit AGENTS.md to add project-specific architecture details" \
-    "Fill in docs/ARCHITECTURE.md with your system design" \
-    "Define coding standards in docs/CONVENTIONS.md" \
-    "Configure test commands in docs/TESTING.md" \
-    "Add architecture linting to your CI pipeline"
+    "Fill in docs/project/ARCHITECTURE.md and docs/project/REQUIREMENTS.md with project-specific context" \
+    "Review .harness/spec-policy.json to align required project-level and feature-level specs" \
+    "Review .harness/doc-impact-rules.json so code changes and doc updates can be gated together" \
+    "Create your first feature spec with bash scripts/new-feature-spec.sh --id FEAT-001 --title \"Your feature\" --owner <name> --change-types <types>" \
+    "Run bash scripts/validate-spec.sh --json before wiring spec checks into CI" \
+    "Add doc impact checks, architecture linting, and spec validation to your CI pipeline"
   printf '}\n'
 }
 
 main() {
   parse_args "$@"
+  init_template_resolver "$DEFAULT_TEMPLATES_DIR" "$USER_TEMPLATE_ROOT" ".harness/templates"
   detect_environment
   create_directories
   generate_files

@@ -1,14 +1,11 @@
-# Coding Conventions
+# 编码规范
 
-## Naming
+兼容旧版 harness 流程的入口文档。
 
-- Files use kebab-case.
-- Functions use camelCase.
-- Types use PascalCase.
+当前项目级开发规范的主入口位于 `docs/project/DEVELOPMENT.md`。
 
-## Golden Rules
+## 命名约定
 
-1. Prefer shared utilities over duplication.
-2. Validate data at system boundaries.
-3. Keep files readable and focused.
-4. Use structured logs instead of bare debug prints.
+- 文件使用 kebab-case。
+- 函数使用 camelCase。
+- 类型使用 PascalCase。

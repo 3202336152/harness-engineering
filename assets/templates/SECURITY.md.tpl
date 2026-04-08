@@ -1,12 +1,10 @@
-# Security
+# 安全规范
 
-## Sensitive Data
+兼容旧版 harness 流程的入口文档。
 
-- Keep `.env` files out of version control.
-- Store secrets in environment variables or secret managers.
+当前项目级安全规范的主入口位于 `docs/project/SECURITY.md`。
 
-## Agent Permissions
+## 敏感数据
 
-- Read source, tests, and docs by default.
-- Write only where the task requires it.
-- Avoid destructive or production actions without approval.
+- 不要将 `.env` 文件提交到版本库。
+- 将密钥保存在环境变量或密钥管理系统中。

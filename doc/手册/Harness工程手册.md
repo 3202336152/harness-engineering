@@ -1,8 +1,13 @@
-# Harness Engineering 执行操作文档
+# Harness Engineering 工程手册
 
 > 版本: 1.0 | 日期: 2026-03-27
 > 适用工具: OpenAI Codex / Claude Code / Cursor / Windsurf / 任何支持 AGENTS.md 或 CLAUDE.md 的 AI IDE
 > 来源: OpenAI Harness Engineering (2026.02), Martin Fowler, HumanLayer, NxCode, 社区实践
+
+> 说明：这是一份方法论和实践手册，适合了解 Harness Engineering 的完整思路。
+> 如果你想找“具体命令怎么用、项目里到底会生成什么、模板怎么改”，不要从这份手册开始，优先看 [../本地使用指南.md](../本地使用指南.md)。
+> 它不是当前仓库实现的逐条契约；当前行为请优先参考 [../../SKILL.md](../../SKILL.md) 和 [../本地使用指南.md](../本地使用指南.md)。
+> 当前实现补充：`doc/` 下维护文档使用中文文件名；项目级共享规范位于 `docs/project/`，功能级规范位于 `docs/features/`，模板默认生成中文内容。
 
 ---
 

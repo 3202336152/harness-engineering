@@ -31,6 +31,8 @@ Types -> Config -> Repo -> Service -> Runtime -> UI
 ## Practical Enforcement
 
 - Store a project-level config in `.harness/architecture.json`.
+- Store spec requirements in `.harness/spec-policy.json`.
+- Keep the canonical project architecture document in `docs/project/ARCHITECTURE.md`.
 - Use `scripts/lint-architecture.sh` as the portable starting point.
 - If the team has stronger native tooling, mirror the same rules in ESLint,
   Ruff, or language-specific analyzers.

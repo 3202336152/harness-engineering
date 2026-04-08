@@ -25,40 +25,57 @@ Core formula:
 Coding Agent = AI Model + Harness
 ```
 
-This skill focuses on three Phase 1 capabilities:
+This skill focuses on three core capabilities plus a spec workflow:
 
 1. `/harness init` scaffolds the core project harness.
 2. `/harness audit` scores current harness maturity and recommends fixes.
 3. `/harness plan` creates a structured execution plan for real work.
+4. Supporting scripts scaffold and validate project-level and feature-level specs.
 
 Supporting scripts extend the flow:
 
 - `scripts/lint-architecture.sh` checks configured dependency boundaries.
 - `scripts/check-doc-freshness.sh` reports stale markdown documentation.
+- `scripts/new-feature-spec.sh` creates feature-level spec packs from change types.
+- `scripts/check-doc-impact.sh` blocks code changes that should have updated specs or project docs.
+- `scripts/validate-spec.sh` validates project-level and feature-level spec completeness.
+- `scripts/prepare-template-overrides.sh` exports built-in templates into a writable override directory.
+- `scripts/check-template-drift.sh` audits template metadata drift and override hygiene.
 - `scripts/verify-spec-compliance.sh` validates the skill package layout.
 
 ## Command: /harness init
 
 Use this when the project is missing `AGENTS.md`, missing core docs, or the
-user asks to prepare a repo for AI coding agents.
+user asks to prepare a repo for AI coding agents and spec-driven delivery.
 
 Execution flow:
 
 1. Detect whether the current directory is a git repository.
 2. Detect the stack from `package.json`, `pyproject.toml`, `go.mod`, or
    `Cargo.toml`.
-3. Create the standard `docs/`, `docs/design-docs/`,
-   `docs/exec-plans/{active,completed,tech-debt}/`, `docs/product-specs/`,
-   `docs/references/`, and `.github/` directories.
-4. Render templates from `assets/templates/`.
-5. Skip existing files unless `--force` is supplied.
-6. Output a JSON summary with created files, skipped files, and next steps.
+3. Create the standard `docs/project/`, `docs/features/`,
+   `docs/design-docs/`, `docs/exec-plans/{active,completed,tech-debt}/`,
+   `docs/product-specs/`, `docs/references/`, and `.github/` directories.
+4. Render compatibility docs plus project-level spec templates from `assets/templates/`.
+5. Create `.harness/architecture.json`, `.harness/spec-policy.json`, and `.harness/doc-impact-rules.json`.
+6. Skip existing files unless `--force` is supplied.
+7. Output a JSON summary with created files, skipped files, and next steps.
 
 Command:
 
 ```bash
-bash scripts/init-harness.sh [--project-name <name>] [--description <text>] [--force] [--dry-run]
+bash scripts/init-harness.sh [--project-name <name>] [--description <text>] [--template-root <path>] [--profile <name>] [--force] [--dry-run]
 ```
+
+Template lookup order for scaffolding:
+
+1. `--template-root <path>`
+2. `HARNESS_TEMPLATE_ROOT`
+3. `.harness/templates/`
+4. Built-in defaults under `assets/templates/`
+
+Generated project-level docs also include `template_version`, `template_profile`, and `template_language` frontmatter.
+For Java repos, the default profile is `java-backend-service`, and you can override it with `--profile`.
 
 ## Command: /harness audit
 
@@ -87,7 +104,7 @@ Scores map to maturity levels:
 Command:
 
 ```bash
-bash scripts/audit-harness.sh [--json] [--verbose]
+bash scripts/audit-harness.sh
 ```
 
 The script prints JSON only on stdout so agents can parse it safely.
@@ -95,6 +112,8 @@ The script prints JSON only on stdout so agents can parse it safely.
 ## Command: /harness plan
 
 Use this when the user asks to implement a feature following harness rules.
+The plan should align with the project-level spec set in `docs/project/`
+and remind the user to update the related feature spec pack in `docs/features/`.
 
 Plan template:
 
@@ -108,9 +127,9 @@ Active
 <clear goal>
 
 ## Constraints
-- Follow docs/ARCHITECTURE.md
-- Follow docs/CONVENTIONS.md
-- Keep tests and docs updated
+- Follow docs/project/ARCHITECTURE.md
+- Follow docs/project/DEVELOPMENT.md
+- Keep tests, docs, and related feature specs updated
 
 ## Acceptance Criteria
 - [ ] Tests pass
@@ -134,6 +153,48 @@ Command:
 ```bash
 bash scripts/plan-harness.sh --task "<task description>" --agent "<agent-name>"
 ```
+
+## Spec Workflow
+
+Project-level specs live under `docs/project/` and act as shared project truth:
+
+- `ARCHITECTURE.md`
+- `DESIGN.md`
+- `API-SPEC.md`
+- `DEVELOPMENT.md`
+- `REQUIREMENTS.md`
+- `TESTING.md`
+- `SECURITY.md`
+
+Feature-level specs live under `docs/features/<feature-id>-<title-slug>/`.
+Human-facing spec content defaults to Chinese, while the file paths remain stable for automation and CI compatibility.
+
+Default required docs:
+
+- `overview.md`
+- `design.md`
+- `test-spec.md`
+- `status.md`
+
+Additional docs are triggered by `change_types` from `.harness/spec-policy.json`.
+Examples: `api-spec.md`, `db-spec.md`, `rollout.md`.
+
+Commands:
+
+```bash
+bash scripts/new-feature-spec.sh --id FEAT-001 --title "Add search" --owner "alice" --change-types api,db [--template-root <path>]
+bash scripts/check-doc-impact.sh --json --staged
+bash scripts/validate-spec.sh --json
+bash scripts/validate-spec.sh --json --strict
+bash scripts/prepare-template-overrides.sh --list
+bash scripts/prepare-template-overrides.sh --template feature/overview.md.tpl
+bash scripts/check-template-drift.sh --json
+```
+
+The generated feature docs inherit the template metadata from `.harness/spec-policy.json`.
+The generated project scaffold also includes `.harness/doc-impact-rules.json` so teams can gate manual code changes against required doc updates.
+Use `--strict` when the team is ready to fail validation on placeholder text, missing sections, and missing template metadata.
+Use `check-template-drift.sh` when the template pack has evolved and you need to identify stale generated docs, redundant overrides, or orphaned custom templates.
 
 ## Architecture Constraints Quick Reference
 
@@ -189,3 +250,8 @@ Rules:
 - `scripts/init-harness.sh`: initialization logic.
 - `scripts/audit-harness.sh`: maturity audit logic.
 - `scripts/plan-harness.sh`: execution-plan generation.
+- `scripts/new-feature-spec.sh`: feature-level spec generation.
+- `scripts/check-doc-impact.sh`: diff-based code/doc consistency gate.
+- `scripts/validate-spec.sh`: project/feature spec validation.
+- `scripts/prepare-template-overrides.sh`: template export and discovery.
+- `scripts/check-template-drift.sh`: template drift and override audit.
