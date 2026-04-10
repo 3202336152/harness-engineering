@@ -7,11 +7,14 @@ OUTPUT_JSON=0
 USE_STAGED=0
 BASE_REF=""
 HEAD_REF="HEAD"
+SUGGEST_ACTIONS=0
+WRITE_ACTION_PLAN=""
 
 CHANGED_FILES=()
 TRIGGERED_RULES=()
 SATISFIED_RULES=()
 VIOLATIONS=()
+SUGGESTED_ACTIONS=()
 
 json_escape() {
   local text="$1"
@@ -52,7 +55,7 @@ safe_array_json() {
 
 usage() {
   cat <<'EOF'
-Usage: check-doc-impact.sh [--rules <path>] [--json] [--staged] [--base-ref <ref>] [--head-ref <ref>]
+Usage: check-doc-impact.sh [--rules <path>] [--json] [--staged] [--base-ref <ref>] [--head-ref <ref>] [--suggest-actions] [--write-action-plan <path>]
 EOF
 }
 
@@ -77,6 +80,14 @@ parse_args() {
         ;;
       --head-ref)
         HEAD_REF="${2:-HEAD}"
+        shift 2
+        ;;
+      --suggest-actions)
+        SUGGEST_ACTIONS=1
+        shift
+        ;;
+      --write-action-plan)
+        WRITE_ACTION_PLAN="${2:-}"
         shift 2
         ;;
       --help|-h)
@@ -110,11 +121,11 @@ load_changed_files() {
   local file
 
   if [ "$USE_STAGED" -eq 1 ]; then
-    diff_output="$(git diff --cached --name-only --diff-filter=ACMR)"
+    diff_output="$(git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR)"
   elif [ -n "$BASE_REF" ]; then
-    diff_output="$(git diff --name-only --diff-filter=ACMR "$BASE_REF" "$HEAD_REF")"
+    diff_output="$(git -c core.quotePath=false diff --name-only --diff-filter=ACMR "$BASE_REF" "$HEAD_REF")"
   else
-    diff_output="$(git diff --name-only --diff-filter=ACMR)"
+    diff_output="$(git -c core.quotePath=false diff --name-only --diff-filter=ACMR)"
   fi
 
   while IFS= read -r file; do
@@ -142,6 +153,18 @@ matches_any_pattern() {
     fi
   done
   return 1
+}
+
+append_unique_value() {
+  local value="$1"
+  shift
+  local existing
+  for existing in "$@"; do
+    if [ "$existing" = "$value" ]; then
+      return 1
+    fi
+  done
+  return 0
 }
 
 load_rule_field_array() {
@@ -181,7 +204,7 @@ emit_rule_records_json() {
   eval "records=(\"\${${source_name}[@]-}\")"
 
   printf '['
-  for record in "${records[@]}"; do
+  for record in "${records[@]-}"; do
     [ -n "$record" ] || continue
     IFS='|' read -r rule_id description guidance matched_code_json matched_doc_json required_any_json required_all_json <<EOF
 $record
@@ -219,7 +242,7 @@ emit_json_report() {
   printf '"rules_path":"%s",' "$(json_escape "$RULES_PATH")"
   printf '"changed_files_count":%s,' "${#CHANGED_FILES[@]}"
   printf '"changed_files":'
-  append_array_json "${CHANGED_FILES[@]}"
+  append_array_json "${CHANGED_FILES[@]-}"
   printf ','
   printf '"triggered_rules_count":%s,' "${#TRIGGERED_RULES[@]}"
   printf '"satisfied_rules_count":%s,' "${#SATISFIED_RULES[@]}"
@@ -232,6 +255,12 @@ emit_json_report() {
   printf ','
   printf '"violations":'
   emit_rule_records_json "violation"
+  if [ "$SUGGEST_ACTIONS" -eq 1 ] || [ -n "$WRITE_ACTION_PLAN" ]; then
+    printf ','
+    printf '"suggested_action_count":%s,' "${#SUGGESTED_ACTIONS[@]}"
+    printf '"suggested_actions":'
+    emit_suggested_actions_json
+  fi
   printf '}\n'
 }
 
@@ -240,6 +269,7 @@ emit_text_report() {
   local rule_id
   local description
   local guidance
+  local action
 
   if [ "${#VIOLATIONS[@]}" -eq 0 ]; then
     printf 'Doc impact check passed. Triggered rules: %s, changed files: %s\n' "${#TRIGGERED_RULES[@]}" "${#CHANGED_FILES[@]}"
@@ -247,7 +277,7 @@ emit_text_report() {
   fi
 
   printf 'Doc impact check failed.\n'
-  for record in "${VIOLATIONS[@]}"; do
+  for record in "${VIOLATIONS[@]-}"; do
     IFS='|' read -r rule_id description guidance _ <<EOF
 $record
 EOF
@@ -256,6 +286,136 @@ EOF
       printf '  建议：%s\n' "$guidance"
     fi
   done
+
+  if [ "$SUGGEST_ACTIONS" -eq 1 ] || [ -n "$WRITE_ACTION_PLAN" ]; then
+    for action in "${SUGGESTED_ACTIONS[@]-}"; do
+      IFS='|' read -r rule_id _ guidance _ <<EOF
+$action
+EOF
+      printf '  可执行建议[%s]: %s\n' "$rule_id" "$guidance"
+    done
+  fi
+}
+
+sections_for_rule() {
+  case "$1" in
+    java-api-surface)
+      append_array_json "## 接口清单" "## 请求设计" "## 响应与错误码"
+      ;;
+    java-db-change)
+      append_array_json "## DDL 与结构变更" "## 数据迁移与回填" "## 回滚与验证"
+      ;;
+    java-security-change)
+      append_array_json "## 认证、授权与审计" "## 输入校验与反序列化安全"
+      ;;
+    build-or-rollout-change)
+      append_array_json "## 发布前检查" "## 回滚触发条件"
+      ;;
+    architecture-rule-change)
+      append_array_json "## 分层与包结构" "## 机械化约束"
+      ;;
+    *)
+      append_array_json
+      ;;
+  esac
+}
+
+candidate_path_from_pattern() {
+  local pattern="$1"
+
+  case "$pattern" in
+    '^docs/project/接口规范\.md$'|'^docs/project/API-SPEC\.md$') printf 'docs/project/接口规范.md' ;;
+    '^docs/project/项目设计\.md$'|'^docs/project/DESIGN\.md$') printf 'docs/project/项目设计.md' ;;
+    '^docs/project/安全规范\.md$'|'^docs/project/SECURITY\.md$') printf 'docs/project/安全规范.md' ;;
+    '^docs/project/开发规范\.md$'|'^docs/project/DEVELOPMENT\.md$') printf 'docs/project/开发规范.md' ;;
+    '^docs/project/项目架构\.md$'|'^docs/project/ARCHITECTURE\.md$') printf 'docs/project/项目架构.md' ;;
+    '^docs/features/[^/]+/接口设计\.md$'|'^docs/features/[^/]+/api-spec\.md$') printf 'docs/features/<feature-id>/接口设计.md' ;;
+    '^docs/features/[^/]+/数据设计\.md$'|'^docs/features/[^/]+/db-spec\.md$') printf 'docs/features/<feature-id>/数据设计.md' ;;
+    '^docs/features/[^/]+/方案设计\.md$'|'^docs/features/[^/]+/design\.md$') printf 'docs/features/<feature-id>/方案设计.md' ;;
+    '^docs/features/[^/]+/发布回滚\.md$'|'^docs/features/[^/]+/rollout\.md$') printf 'docs/features/<feature-id>/发布回滚.md' ;;
+    *)
+      printf '%s' "$pattern" \
+        | sed -e 's/^\^//' -e 's/\$$//' -e 's#\\\.#.#g' -e 's#\\/#/#g'
+      ;;
+  esac
+}
+
+emit_suggested_actions_json() {
+  local first=1
+  local action
+  local rule_id
+  local action_kind
+  local guidance
+  local target_paths_json
+  local sections_json
+
+  printf '['
+  for action in "${SUGGESTED_ACTIONS[@]-}"; do
+    [ -n "$action" ] || continue
+    IFS='|' read -r rule_id action_kind guidance target_paths_json sections_json <<EOF
+$action
+EOF
+    if [ "$first" -eq 0 ]; then
+      printf ','
+    fi
+    first=0
+    printf '{'
+    printf '"rule_id":"%s",' "$(json_escape "$rule_id")"
+    printf '"action":"%s",' "$(json_escape "$action_kind")"
+    printf '"guidance":"%s",' "$(json_escape "$guidance")"
+    printf '"target_paths":%s,' "${target_paths_json:-[]}"
+    printf '"suggested_sections":%s' "${sections_json:-[]}"
+    printf '}'
+  done
+  printf ']'
+}
+
+build_suggested_actions() {
+  local record
+  local rule_id
+  local description
+  local guidance
+  local required_any_json
+  local required_all_json
+  local candidate_paths=()
+  local pattern
+  local path
+
+  for record in "${VIOLATIONS[@]-}"; do
+    [ -n "$record" ] || continue
+    IFS='|' read -r rule_id description guidance _ _ required_any_json required_all_json <<EOF
+$record
+EOF
+
+    candidate_paths=()
+    while IFS= read -r pattern; do
+      [ -n "$pattern" ] || continue
+      path="$(candidate_path_from_pattern "$pattern")"
+      if [ -n "$path" ] && { [ "${#candidate_paths[@]}" -eq 0 ] || append_unique_value "$path" "${candidate_paths[@]-}"; }; then
+        candidate_paths+=("$path")
+      fi
+    done <<EOF
+$(printf '%s\n%s\n' "$required_any_json" "$required_all_json" | jq -r '.[]?' 2>/dev/null)
+EOF
+
+    SUGGESTED_ACTIONS+=(
+      "$rule_id|update_docs|${guidance:-$description}|$(append_array_json "${candidate_paths[@]-}")|$(sections_for_rule "$rule_id")"
+    )
+  done
+}
+
+write_action_plan() {
+  local output_path="$1"
+
+  [ -n "$output_path" ] || return 0
+
+  mkdir -p "$(dirname "$output_path")"
+  printf '{\n' > "$output_path"
+  printf '  "status": "planned",\n' >> "$output_path"
+  printf '  "violation_count": %s,\n' "${#VIOLATIONS[@]}" >> "$output_path"
+  printf '  "actions": ' >> "$output_path"
+  emit_suggested_actions_json >> "$output_path"
+  printf '\n}\n' >> "$output_path"
 }
 
 evaluate_rules() {
@@ -306,13 +466,13 @@ EOF
 $(load_rule_field_array "$rule_id" "required_doc_patterns_all")
 EOF
 
-    for file in "${CHANGED_FILES[@]}"; do
-      if [ "${#code_patterns[@]}" -gt 0 ] && matches_any_pattern "$file" "${code_patterns[@]}"; then
+    for file in "${CHANGED_FILES[@]-}"; do
+      if [ "${#code_patterns[@]}" -gt 0 ] && matches_any_pattern "$file" "${code_patterns[@]-}"; then
         matched_code_files+=("$file")
       fi
 
-      if { [ "${#required_any[@]}" -gt 0 ] && matches_any_pattern "$file" "${required_any[@]}"; } \
-        || { [ "${#required_all[@]}" -gt 0 ] && matches_any_pattern "$file" "${required_all[@]}"; }; then
+      if { [ "${#required_any[@]}" -gt 0 ] && matches_any_pattern "$file" "${required_any[@]-}"; } \
+        || { [ "${#required_all[@]}" -gt 0 ] && matches_any_pattern "$file" "${required_all[@]-}"; }; then
         matched_doc_files+=("$file")
       fi
     done
@@ -329,8 +489,8 @@ EOF
       any_ok=0
     else
       any_ok=1
-      for file in "${CHANGED_FILES[@]}"; do
-        if matches_any_pattern "$file" "${required_any[@]}"; then
+      for file in "${CHANGED_FILES[@]-}"; do
+        if matches_any_pattern "$file" "${required_any[@]-}"; then
           any_ok=0
           break
         fi
@@ -340,10 +500,10 @@ EOF
     if [ "${#required_all[@]}" -eq 0 ]; then
       all_ok=0
     else
-      for pattern in "${required_all[@]}"; do
+      for pattern in "${required_all[@]-}"; do
         [ -n "$pattern" ] || continue
         all_ok=1
-        for file in "${CHANGED_FILES[@]}"; do
+        for file in "${CHANGED_FILES[@]-}"; do
           if matches_pattern "$file" "$pattern"; then
             all_ok=0
             break
@@ -381,6 +541,10 @@ main() {
 
   load_changed_files
   evaluate_rules
+  if [ "$SUGGEST_ACTIONS" -eq 1 ] || [ -n "$WRITE_ACTION_PLAN" ]; then
+    build_suggested_actions
+    write_action_plan "$WRITE_ACTION_PLAN"
+  fi
 
   if [ "$OUTPUT_JSON" -eq 1 ]; then
     emit_json_report

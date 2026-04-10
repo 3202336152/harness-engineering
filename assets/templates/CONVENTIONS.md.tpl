@@ -2,7 +2,7 @@
 
 兼容旧版 harness 流程的入口文档。
 
-当前项目级开发规范的主入口位于 `docs/project/DEVELOPMENT.md`。
+当前项目级开发规范的主入口位于 `docs/project/开发规范.md`。
 
 ## 命名约定
 

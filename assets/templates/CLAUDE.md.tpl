@@ -17,22 +17,22 @@
 - 核心业务逻辑位于哪些模块/包
 - 数据、缓存、消息和外部系统的主要交互方式
 
-项目级架构规范见 `docs/project/ARCHITECTURE.md`。
+项目级架构规范见 `docs/project/项目架构.md`。
 
 ## 文档导航
 
-- 项目级架构：`docs/project/ARCHITECTURE.md`
-- 项目级设计：`docs/project/DESIGN.md`
-- 项目级接口规范：`docs/project/API-SPEC.md`
-- 项目级开发规范：`docs/project/DEVELOPMENT.md`
-- 项目级测试策略：`docs/project/TESTING.md`
-- 项目级安全规范：`docs/project/SECURITY.md`
+- 项目级架构：`docs/project/项目架构.md`
+- 项目级设计：`docs/project/项目设计.md`
+- 项目级接口规范：`docs/project/接口规范.md`
+- 项目级开发规范：`docs/project/开发规范.md`
+- 项目级测试策略：`docs/project/测试策略.md`
+- 项目级安全规范：`docs/project/安全规范.md`
 - 文档影响规则：`.harness/doc-impact-rules.json`
 - 功能级 spec：`docs/features/`
 
 ## 关键约束
 
-1. 修改核心基础设施前先查看 `docs/design-docs/core-beliefs.md`。
+1. 修改核心基础设施前先查看 `docs/design-docs/核心信念.md`。
 2. 每次有意义的改动都同步更新测试和文档。
 3. 优先复用共享能力，避免复制粘贴式实现。
 4. 对重要功能变更，在 `docs/features/` 下创建或更新功能级 spec。

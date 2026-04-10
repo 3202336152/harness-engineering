@@ -16,27 +16,31 @@ bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2
 output=$(bash "$REPO_ROOT/scripts/new-feature-spec.sh" --id FEAT-001 --title "User Search" --owner alice --change-types api,db,rollout 2>&1)
 status=$?
 assert_success "$status" "feature spec command succeeds"
-assert_file_exists "docs/features/FEAT-001-user-search/overview.md"
-assert_file_exists "docs/features/FEAT-001-user-search/design.md"
-assert_file_exists "docs/features/FEAT-001-user-search/api-spec.md"
-assert_file_exists "docs/features/FEAT-001-user-search/db-spec.md"
-assert_file_exists "docs/features/FEAT-001-user-search/test-spec.md"
-assert_file_exists "docs/features/FEAT-001-user-search/rollout.md"
-assert_file_exists "docs/features/FEAT-001-user-search/status.md"
-assert_file_contains "docs/features/FEAT-001-user-search/overview.md" "id: FEAT-001"
-assert_file_contains "docs/features/FEAT-001-user-search/overview.md" "template_version: 1.1.0"
-assert_file_contains "docs/features/FEAT-001-user-search/overview.md" "template_profile: generic"
-assert_file_contains "docs/features/FEAT-001-user-search/overview.md" "# 功能概览"
-assert_file_contains "docs/features/FEAT-001-user-search/overview.md" "## 业务背景与目标"
-assert_file_contains "docs/features/FEAT-001-user-search/design.md" "## 模块与分层影响"
-assert_file_contains "docs/features/FEAT-001-user-search/api-spec.md" "## 接口清单"
-assert_file_contains "docs/features/FEAT-001-user-search/db-spec.md" "## DDL 与结构变更"
-assert_file_contains "docs/features/FEAT-001-user-search/test-spec.md" "# 测试方案"
-assert_file_contains "docs/features/FEAT-001-user-search/test-spec.md" "## 测试范围矩阵"
-assert_file_contains "docs/features/FEAT-001-user-search/rollout.md" "## 发布前检查"
-assert_file_contains "docs/features/FEAT-001-user-search/status.md" "## 当前状态"
+assert_file_exists "docs/features/FEAT-001-user-search/功能概览.md"
+assert_file_exists "docs/features/FEAT-001-user-search/方案设计.md"
+assert_file_exists "docs/features/FEAT-001-user-search/接口设计.md"
+assert_file_exists "docs/features/FEAT-001-user-search/数据设计.md"
+assert_file_exists "docs/features/FEAT-001-user-search/测试方案.md"
+assert_file_exists "docs/features/FEAT-001-user-search/发布回滚.md"
+assert_file_exists "docs/features/FEAT-001-user-search/状态.md"
+assert_file_exists "docs/features/FEAT-001-user-search/manifest.json"
+assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "id: FEAT-001"
+assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "template_version: 1.1.0"
+assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "template_profile: generic"
+assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "# 功能概览"
+assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "## 业务背景与目标"
+assert_file_contains "docs/features/FEAT-001-user-search/方案设计.md" "## 模块与分层影响"
+assert_file_contains "docs/features/FEAT-001-user-search/接口设计.md" "## 接口清单"
+assert_file_contains "docs/features/FEAT-001-user-search/数据设计.md" "## DDL 与结构变更"
+assert_file_contains "docs/features/FEAT-001-user-search/测试方案.md" "# 测试方案"
+assert_file_contains "docs/features/FEAT-001-user-search/测试方案.md" "## 测试范围矩阵"
+assert_file_contains "docs/features/FEAT-001-user-search/发布回滚.md" "## 发布前检查"
+assert_file_contains "docs/features/FEAT-001-user-search/状态.md" "## 当前状态"
+assert_json_field "$(cat docs/features/FEAT-001-user-search/manifest.json)" ".feature_id" "FEAT-001"
+assert_json_field "$(cat docs/features/FEAT-001-user-search/manifest.json)" '.required_docs | index("发布回滚.md") != null' "true"
+assert_json_field "$(cat docs/features/FEAT-001-user-search/manifest.json)" ".rollback_required" "true"
 assert_json_field "$output" ".status" "success"
-assert_json_number_gte "$output" ".created_files | length" "7"
+assert_json_number_gte "$output" ".created_files | length" "8"
 teardown_test_dir
 
 it "validates a scaffolded project and feature spec set"
@@ -160,12 +164,53 @@ setup_test_dir
 init_git_repo
 bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
 bash "$REPO_ROOT/scripts/new-feature-spec.sh" --id FEAT-003 --title "Search Filters" --owner carol --change-types api >/dev/null 2>&1
-rm "docs/features/FEAT-003-search-filters/api-spec.md"
+rm "docs/features/FEAT-003-search-filters/接口设计.md"
 output=$(bash "$REPO_ROOT/scripts/validate-spec.sh" --json 2>&1)
 status=$?
 assert_eq "1" "$status" "spec validation fails when required docs are missing"
 assert_json_field "$output" ".status" "invalid"
 assert_json_field "$output" ".features.invalid_count" "1"
+teardown_test_dir
+
+it "writes a fix plan for missing feature docs"
+setup_test_dir
+init_git_repo
+bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
+bash "$REPO_ROOT/scripts/new-feature-spec.sh" --id FEAT-006 --title "Order Query" --owner frank --change-types api >/dev/null 2>&1
+rm "docs/features/FEAT-006-order-query/接口设计.md"
+output=$(bash "$REPO_ROOT/scripts/validate-spec.sh" --json --write-fix-plan .harness/fix-plan.json 2>&1)
+status=$?
+assert_eq "1" "$status" "spec validation still fails before autofix"
+assert_file_exists ".harness/fix-plan.json"
+assert_json_field "$(cat .harness/fix-plan.json)" ".status" "planned"
+assert_json_field "$(cat .harness/fix-plan.json)" ".actions[0].action" "create_feature_doc"
+teardown_test_dir
+
+it "autofix-safe recreates missing feature docs from templates"
+setup_test_dir
+init_git_repo
+bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
+bash "$REPO_ROOT/scripts/new-feature-spec.sh" --id FEAT-007 --title "Order Query" --owner grace --change-types api >/dev/null 2>&1
+rm "docs/features/FEAT-007-order-query/接口设计.md"
+output=$(bash "$REPO_ROOT/scripts/validate-spec.sh" --json --autofix-safe 2>&1)
+status=$?
+assert_success "$status" "autofix-safe succeeds for missing feature docs"
+assert_file_exists "docs/features/FEAT-007-order-query/接口设计.md"
+assert_json_field "$output" ".status" "passed"
+assert_json_number_gte "$output" ".autofix_count" "1"
+teardown_test_dir
+
+it "passes rollback readiness when rollout docs are present"
+setup_test_dir
+init_git_repo
+bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
+bash "$REPO_ROOT/scripts/new-feature-spec.sh" --id FEAT-008 --title "Order Query" --owner helen --change-types rollout >/dev/null 2>&1
+output=$(bash "$REPO_ROOT/scripts/check-rollback-readiness.sh" --feature-id FEAT-008 --json 2>&1)
+status=$?
+assert_success "$status" "rollback readiness succeeds when rollout docs are complete"
+assert_json_field "$output" ".status" "passed"
+assert_json_field "$output" ".rollback_required" "true"
+assert_json_field "$output" '.missing_items | length' "0"
 teardown_test_dir
 
 it "keeps Chinese feature titles as readable directory names"
@@ -175,9 +220,10 @@ bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2
 output=$(bash "$REPO_ROOT/scripts/new-feature-spec.sh" --id FEAT-004 --title "用户 搜索" --owner dora --change-types api 2>&1)
 status=$?
 assert_success "$status" "feature spec command succeeds for Chinese title"
-assert_file_exists "docs/features/FEAT-004-用户-搜索/overview.md"
-assert_file_exists "docs/features/FEAT-004-用户-搜索/api-spec.md"
-assert_file_contains "docs/features/FEAT-004-用户-搜索/overview.md" "title: 用户 搜索"
+assert_file_exists "docs/features/FEAT-004-用户-搜索/功能概览.md"
+assert_file_exists "docs/features/FEAT-004-用户-搜索/接口设计.md"
+assert_file_exists "docs/features/FEAT-004-用户-搜索/manifest.json"
+assert_file_contains "docs/features/FEAT-004-用户-搜索/功能概览.md" "title: 用户 搜索"
 assert_json_field "$output" ".feature_dir" "docs/features/FEAT-004-用户-搜索"
 teardown_test_dir
 
@@ -206,8 +252,8 @@ EOF
 output=$(bash "$REPO_ROOT/scripts/new-feature-spec.sh" --id FEAT-005 --title "Custom Search" --owner erin --change-types api 2>&1)
 status=$?
 assert_success "$status" "feature spec command succeeds with project template override"
-assert_file_contains "docs/features/FEAT-005-custom-search/overview.md" "# 自定义功能概览"
-assert_file_contains "docs/features/FEAT-005-custom-search/overview.md" "团队定制字段"
+assert_file_contains "docs/features/FEAT-005-custom-search/功能概览.md" "# 自定义功能概览"
+assert_file_contains "docs/features/FEAT-005-custom-search/功能概览.md" "团队定制字段"
 teardown_test_dir
 
 print_summary

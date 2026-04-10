@@ -5,6 +5,16 @@ Harness Engineering 工作环境，并为项目级与功能级 spec 提供统一
 
 ## 安装
 
+本地开发和试点时，推荐直接使用仓库自带的精简安装脚本：
+
+```bash
+bash scripts/install-skill.sh --global
+```
+
+它会先导出一个精简 Skill 包，再安装到全局目录，避免把 `tests/`、历史设计文档、归档文档、PDF 一起装进 `~/.agents/skills/`。
+
+如果你是从远程仓库直接安装：
+
 ```bash
 npx skills add 3202336152/harness-engineering
 ```
@@ -17,12 +27,24 @@ npx skills add 3202336152/harness-engineering
 | `/harness audit` | 审计当前项目的 Harness 成熟度 |
 | `/harness plan` | 生成结构化执行计划 |
 
+详细参数、返回结果、产物和示例，请看 [doc/命令使用说明.md](./doc/命令使用说明.md)。
+
+## 基础自治入口
+
+| 命令 | 说明 |
+|------|------|
+| `bash scripts/harness-exec.sh prepare --task "<任务>" --feature-id FEAT-001 --title "<标题>" --json` | 一次生成功能 spec、Markdown 执行计划、机器计划 JSON、上下文 bundle |
+| `bash scripts/harness-exec.sh verify --feature-id FEAT-001 --json` | 聚合校验，并落 run record、metrics ledger、task memory、progress、evidence |
+| `bash scripts/harness-exec.sh run --task "<任务>" --feature-id FEAT-001 --title "<标题>" --json` | 串联 `prepare -> verify -> autofix-safe -> reverify`，并按策略触发证据采集与 GC |
+
 ## 仓库内容
 
 - `SKILL.md`：Skill 入口文件
 - `scripts/`：脚本实现
 - `assets/templates/`：初始化模板
 - `references/`：深度参考文档
+- `scripts/export-skill-package.sh`：导出精简安装包
+- `scripts/install-skill.sh`：一键导出并安装精简包
 - `tests/`：本地测试
 
 ## Spec 工作流
@@ -30,14 +52,47 @@ npx skills add 3202336152/harness-engineering
 - 项目级 spec 统一放在 `docs/project/`
 - 功能级 spec 统一放在 `docs/features/<feature-id>-<title-slug>/`
 - `doc/` 下的维护文档统一使用中文文件名
-- 项目级与功能级 spec 模板默认生成中文内容，便于团队查看、评审和比对
+- 项目级与功能级 spec 模板默认生成中文内容和中文 `md` 文件名，便于团队查看、评审和检索
+- 默认生成的文件示例：
+  - `docs/project/项目架构.md`
+  - `docs/project/开发规范.md`
+  - `docs/project/运行基线.md`
+  - `docs/features/FEAT-001-order-query/功能概览.md`
+  - `docs/features/FEAT-001-order-query/接口设计.md`
 - 生成的项目级/功能级 spec 会带 `template_version`、`template_profile`、`template_language` 元数据
+- `init` 还会生成 `docs/project/运行基线.md`、`docs/project/可观测性基线.md`、`.harness/context-policy.json`、`.harness/run-policy.json`
 - 项目规则通过 `.harness/spec-policy.json` 描述
-- 功能文档通过 `bash scripts/new-feature-spec.sh ...` 生成
+- 功能文档通过 `bash scripts/new-feature-spec.sh ...` 生成，并附带 `manifest.json`
+- 执行计划通过 `bash scripts/plan-harness.sh ...` 同时生成 `md + json`
+- 任务上下文通过 `bash scripts/resolve-task-context.sh --task ... --json` 解析并可落盘为 bundle
 - 代码改动与文档更新的一致性可通过 `bash scripts/check-doc-impact.sh --json --staged` 进行门禁
 - 结构完整性通过 `bash scripts/validate-spec.sh --json` 校验
 - 内容质量门禁可通过 `bash scripts/validate-spec.sh --json --strict` 启用
-- 兼容脚本与 CI 的前提下，`docs/project/*.md` 与 `docs/features/*/*.md` 保持稳定路径命名
+- 安全可自动修复的结构问题可通过 `bash scripts/validate-spec.sh --json --autofix-safe` 修复
+- 高风险功能可通过 `bash scripts/check-rollback-readiness.sh --feature-id FEAT-001 --json` 校验回滚准备度
+- 模板升级后的历史文档可通过 `bash scripts/migrate-template-docs.sh --json` 做带备份的安全迁移
+- 运行期证据采集策略可通过 `.harness/observability-policy.json` 配置
+- 运行记录会沉淀到 `.harness/runs/`、`.harness/metrics/`、`.harness/evidence/`、`.harness/runtime/`
+- 旧的上下文 bundle、run record、evidence 目录可通过 `bash scripts/harness-gc.sh --json` 做保留清理
+
+## 当前自治能力边界
+
+已经补齐的基础能力：
+
+- 机械化约束：`check-doc-impact`、`validate-spec`、`lint-architecture`、`check-rollback-readiness` 都可以直接接本地钩子和 CI
+- 上下文分级：`.harness/context-policy.json` + `resolve-task-context.sh` 会把必读规范、功能 spec、验证步骤收敛成机器可读 bundle
+- 文档熵控制：`manifest.json`、模板元数据、严格校验、template drift 检查、safe autofix 已经形成基础治理面
+- 历史模板迁移：`migrate-template-docs.sh` 会先备份，再调用 safe autofix 迁移结构类模板差异
+- 反馈闭环：`harness-exec.sh verify/run` 会聚合校验结果，并把 run record、metrics、task memory、progress、evidence 一起落盘
+- 长周期记忆：`.harness/runtime/task-memory.json` 与 `.harness/runtime/progress.md` 会持续记录最近任务和运行状态
+- 可观测性接入：`.harness/observability-policy.json` 可以按项目配置命令输出和文件证据采集
+- 回收治理：`harness-gc.sh` 会按 `.harness/run-policy.json` 的保留策略清理旧上下文、旧记录、旧证据
+
+还没有完全自动化的部分：
+
+- 历史文档迁移目前是“安全结构迁移”，不是“理解语义后自动重写全文”
+- 运行账本和证据目前是仓库本地文件形态，还没有内建 dashboard、远端聚合或告警平台自动注册
+- `autofix-safe` 目前只覆盖 spec 结构和少量元数据修复，不会自动改业务代码或补全业务语义内容
 
 ## Java Profile
 
@@ -81,6 +136,8 @@ npx skills add 3202336152/harness-engineering
 
 ```bash
 bash tests/run-tests.sh
+bash scripts/verify-spec-compliance.sh
+bash scripts/export-skill-package.sh --output-dir .build/skill-package
 bash scripts/publish-check.sh --skip-official
 ```
 
@@ -90,6 +147,9 @@ bash scripts/publish-check.sh --skip-official
 
 - [doc/文档导航.md](./doc/文档导航.md)
 - [doc/本地使用指南.md](./doc/本地使用指南.md)
+- [doc/命令使用说明.md](./doc/命令使用说明.md)
+- [doc/能力与功能说明.md](./doc/能力与功能说明.md)
+- [doc/安装与试点指南.md](./doc/安装与试点指南.md)
 
 ## License
 

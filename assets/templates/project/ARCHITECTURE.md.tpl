@@ -124,7 +124,7 @@ Types -> Config -> Repo -> Service -> Runtime -> UI
 ## 安全与合规边界
 
 记录接口鉴权、数据脱敏、权限校验、操作审计、敏感配置管理的统一原则，
-并链接到 `docs/project/SECURITY.md` 的详细要求。
+并链接到 `docs/project/安全规范.md` 的详细要求。
 
 ## 机械化约束
 

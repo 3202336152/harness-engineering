@@ -2,6 +2,11 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# shellcheck source=scripts/lib/doc-paths.sh
+. "$SCRIPT_DIR/lib/doc-paths.sh"
+
 ENTRY_SCORE=0
 ENTRY_STATUS=""
 ENTRY_DETAILS=""
@@ -10,7 +15,7 @@ ENTRY_FIX="Run /harness init to create AGENTS.md or CLAUDE.md."
 DOC_SCORE=0
 DOC_STATUS=""
 DOC_DETAILS=""
-DOC_FIX="Create the project-level spec set under docs/project/ (ARCHITECTURE, DEVELOPMENT, TESTING, SECURITY) or keep the legacy docs/*.md compatibility files in place."
+DOC_FIX="Create the project-level spec set under docs/project/ (项目架构、开发规范、测试策略、安全规范) or keep the legacy docs/*.md compatibility files in place."
 
 FRESHNESS_SCORE=0
 FRESHNESS_STATUS=""
@@ -40,7 +45,7 @@ EXEC_FIX="Create docs/exec-plans/active and track real execution plans there."
 SECURITY_SCORE=0
 SECURITY_STATUS=""
 SECURITY_DETAILS=""
-SECURITY_FIX="Document security guidance in docs/project/SECURITY.md and ignore secrets in version control."
+SECURITY_FIX="Document security guidance in $(project_doc_path security) and ignore secrets in version control."
 
 OVERALL_SCORE=0
 MATURITY_LEVEL=0
@@ -169,10 +174,10 @@ score_entry_document() {
 score_doc_structure() {
   local file
   for file in \
-    "$(first_existing_path docs/project/ARCHITECTURE.md docs/ARCHITECTURE.md)" \
-    "$(first_existing_path docs/project/DEVELOPMENT.md docs/CONVENTIONS.md)" \
-    "$(first_existing_path docs/project/TESTING.md docs/TESTING.md)" \
-    "$(first_existing_path docs/project/SECURITY.md docs/SECURITY.md)"; do
+    "$(first_existing_project_doc architecture || true)" \
+    "$(first_existing_project_doc development || true)" \
+    "$(first_existing_project_doc testing || true)" \
+    "$(first_existing_project_doc security || true)"; do
     [ -n "$file" ] || continue
     if [ "$(wc -l < "$file" | tr -d ' ')" -gt 2 ]; then
       DOC_SCORE=$((DOC_SCORE + 25))
@@ -183,16 +188,16 @@ score_doc_structure() {
     fi
   done
 
-  if [ -z "$(first_existing_path docs/project/ARCHITECTURE.md docs/ARCHITECTURE.md)" ]; then
+  if [ -z "$(first_existing_project_doc architecture || true)" ]; then
     DOC_DETAILS="$(append_detail "$DOC_DETAILS" "Architecture spec missing")"
   fi
-  if [ -z "$(first_existing_path docs/project/DEVELOPMENT.md docs/CONVENTIONS.md)" ]; then
+  if [ -z "$(first_existing_project_doc development || true)" ]; then
     DOC_DETAILS="$(append_detail "$DOC_DETAILS" "Development conventions missing")"
   fi
-  if [ -z "$(first_existing_path docs/project/TESTING.md docs/TESTING.md)" ]; then
+  if [ -z "$(first_existing_project_doc testing || true)" ]; then
     DOC_DETAILS="$(append_detail "$DOC_DETAILS" "Testing spec missing")"
   fi
-  if [ -z "$(first_existing_path docs/project/SECURITY.md docs/SECURITY.md)" ]; then
+  if [ -z "$(first_existing_project_doc security || true)" ]; then
     DOC_DETAILS="$(append_detail "$DOC_DETAILS" "Security spec missing")"
   fi
 
@@ -274,7 +279,7 @@ score_architecture_constraints() {
     fi
   done
 
-  if any_file_matches 'layer|dependency|boundary' docs/project/ARCHITECTURE.md docs/ARCHITECTURE.md; then
+  if any_file_matches 'layer|dependency|boundary' "$(project_doc_path architecture)" docs/project/ARCHITECTURE.md "$(project_index_doc_path architecture-index)" docs/ARCHITECTURE.md; then
     ARCH_SCORE=$((ARCH_SCORE + 20))
     ARCH_DETAILS="$(append_detail "$ARCH_DETAILS" "Architecture document describes constraints")"
   fi
@@ -374,7 +379,7 @@ score_security_governance() {
     SECURITY_DETAILS="$(append_detail "$SECURITY_DETAILS" ".env is ignored")"
   fi
 
-  if [ -f docs/project/SECURITY.md ] || [ -f docs/SECURITY.md ] || [ -f SECURITY.md ]; then
+  if [ -n "$(first_existing_project_doc security || true)" ] || [ -f SECURITY.md ]; then
     SECURITY_SCORE=$((SECURITY_SCORE + 30))
     SECURITY_DETAILS="$(append_detail "$SECURITY_DETAILS" "Security documentation found")"
   fi

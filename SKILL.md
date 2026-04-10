@@ -31,16 +31,23 @@ This skill focuses on three core capabilities plus a spec workflow:
 2. `/harness audit` scores current harness maturity and recommends fixes.
 3. `/harness plan` creates a structured execution plan for real work.
 4. Supporting scripts scaffold and validate project-level and feature-level specs.
+5. The autonomous baseline scripts create a machine-readable prepare/verify/run loop.
 
 Supporting scripts extend the flow:
 
 - `scripts/lint-architecture.sh` checks configured dependency boundaries.
 - `scripts/check-doc-freshness.sh` reports stale markdown documentation.
 - `scripts/new-feature-spec.sh` creates feature-level spec packs from change types.
+- `scripts/resolve-task-context.sh` resolves the minimum required context bundle for a task.
 - `scripts/check-doc-impact.sh` blocks code changes that should have updated specs or project docs.
 - `scripts/validate-spec.sh` validates project-level and feature-level spec completeness.
+- `scripts/check-rollback-readiness.sh` checks whether rollout-heavy features have rollback docs ready.
+- `scripts/harness-exec.sh` orchestrates `prepare`, `verify`, and `run` stages for a baseline autonomous loop.
 - `scripts/prepare-template-overrides.sh` exports built-in templates into a writable override directory.
 - `scripts/check-template-drift.sh` audits template metadata drift and override hygiene.
+- `scripts/migrate-template-docs.sh` migrates historical docs to the current template pack with backup-first safety.
+- `scripts/collect-runtime-evidence.sh` captures configured commands and file artifacts into an evidence bundle.
+- `scripts/harness-gc.sh` prunes old context bundles, run records, and evidence directories.
 - `scripts/verify-spec-compliance.sh` validates the skill package layout.
 
 ## Command: /harness init
@@ -57,9 +64,10 @@ Execution flow:
    `docs/design-docs/`, `docs/exec-plans/{active,completed,tech-debt}/`,
    `docs/product-specs/`, `docs/references/`, and `.github/` directories.
 4. Render compatibility docs plus project-level spec templates from `assets/templates/`.
-5. Create `.harness/architecture.json`, `.harness/spec-policy.json`, and `.harness/doc-impact-rules.json`.
-6. Skip existing files unless `--force` is supplied.
-7. Output a JSON summary with created files, skipped files, and next steps.
+5. Create `.harness/architecture.json`, `.harness/spec-policy.json`, `.harness/doc-impact-rules.json`, `.harness/context-policy.json`, `.harness/run-policy.json`, and `.harness/observability-policy.json`.
+6. Create `.harness/runtime/task-memory.json`, `.harness/runtime/progress.md`, `.harness/evidence/`, and `.harness/metrics/`.
+7. Skip existing files unless `--force` is supplied.
+8. Output a JSON summary with created files, skipped files, and next steps.
 
 Command:
 
@@ -75,6 +83,7 @@ Template lookup order for scaffolding:
 4. Built-in defaults under `assets/templates/`
 
 Generated project-level docs also include `template_version`, `template_profile`, and `template_language` frontmatter.
+The scaffold also adds `docs/project/运行基线.md` and `docs/project/可观测性基线.md` so rollout, on-call, and telemetry rules are part of the shared truth.
 For Java repos, the default profile is `java-backend-service`, and you can override it with `--profile`.
 
 ## Command: /harness audit
@@ -127,8 +136,8 @@ Active
 <clear goal>
 
 ## Constraints
-- Follow docs/project/ARCHITECTURE.md
-- Follow docs/project/DEVELOPMENT.md
+- Follow docs/project/项目架构.md
+- Follow docs/project/开发规范.md
 - Keep tests, docs, and related feature specs updated
 
 ## Acceptance Criteria
@@ -154,41 +163,77 @@ Command:
 bash scripts/plan-harness.sh --task "<task description>" --agent "<agent-name>"
 ```
 
+The plan command now writes both a Markdown execution plan and a machine-readable JSON plan, so downstream automation can reason over risk level, required checks, and rollback expectations.
+
+## Baseline Autonomous Flow
+
+Use this when the user wants a mechanically constrained local loop instead of scattered ad-hoc commands.
+
+Commands:
+
+```bash
+bash scripts/harness-exec.sh prepare --task "Add search" --feature-id FEAT-001 --title "Add search" --agent codex --json
+bash scripts/harness-exec.sh verify --feature-id FEAT-001 --json
+bash scripts/harness-exec.sh run --task "Add search" --feature-id FEAT-001 --title "Add search" --agent codex --json
+```
+
+Behavior:
+
+- `prepare` creates a feature spec pack if needed, writes the Markdown plus JSON execution plan, and records a task context bundle under `.harness/runtime/context/`.
+- `verify` aggregates spec validation, doc impact, architecture lint, doc freshness, and rollback readiness, then writes a run record, metrics ledger entry, task memory snapshot, progress report, and evidence bundle.
+- `run` chains `prepare -> verify -> autofix-safe -> reverify`, records the final run result, and can trigger retention GC from `.harness/run-policy.json`.
+
+Current boundary:
+
+- This is a baseline autonomous loop, not full autonomy.
+- Historical migration is safe and structural; it does not semantically rewrite whole documents.
+- Runtime ledgers and evidence are local repo artifacts, not a hosted metrics or observability backend.
+- `autofix-safe` only repairs safe structural spec issues, not business-code semantics.
+
 ## Spec Workflow
 
 Project-level specs live under `docs/project/` and act as shared project truth:
 
-- `ARCHITECTURE.md`
-- `DESIGN.md`
-- `API-SPEC.md`
-- `DEVELOPMENT.md`
-- `REQUIREMENTS.md`
-- `TESTING.md`
-- `SECURITY.md`
+- `项目架构.md`
+- `项目设计.md`
+- `接口规范.md`
+- `开发规范.md`
+- `运行基线.md`
+- `可观测性基线.md`
+- `需求说明.md`
+- `测试策略.md`
+- `安全规范.md`
 
 Feature-level specs live under `docs/features/<feature-id>-<title-slug>/`.
-Human-facing spec content defaults to Chinese, while the file paths remain stable for automation and CI compatibility.
+Human-facing spec content and generated Markdown file names default to Chinese.
+Each feature pack also includes a `manifest.json` with required docs, related project docs, verification checks, risk level, rollback requirement, and template metadata.
 
 Default required docs:
 
-- `overview.md`
-- `design.md`
-- `test-spec.md`
-- `status.md`
+- `功能概览.md`
+- `方案设计.md`
+- `测试方案.md`
+- `状态.md`
 
 Additional docs are triggered by `change_types` from `.harness/spec-policy.json`.
-Examples: `api-spec.md`, `db-spec.md`, `rollout.md`.
+Examples: `接口设计.md`, `数据设计.md`, `发布回滚.md`.
 
 Commands:
 
 ```bash
 bash scripts/new-feature-spec.sh --id FEAT-001 --title "Add search" --owner "alice" --change-types api,db [--template-root <path>]
+bash scripts/resolve-task-context.sh --task "Add search" --feature-id FEAT-001 --json
 bash scripts/check-doc-impact.sh --json --staged
 bash scripts/validate-spec.sh --json
 bash scripts/validate-spec.sh --json --strict
+bash scripts/validate-spec.sh --json --autofix-safe
+bash scripts/check-rollback-readiness.sh --feature-id FEAT-001 --json
+bash scripts/harness-exec.sh verify --feature-id FEAT-001 --json
 bash scripts/prepare-template-overrides.sh --list
 bash scripts/prepare-template-overrides.sh --template feature/overview.md.tpl
 bash scripts/check-template-drift.sh --json
+bash scripts/migrate-template-docs.sh --json
+bash scripts/harness-gc.sh --json
 ```
 
 The generated feature docs inherit the template metadata from `.harness/spec-policy.json`.
@@ -251,7 +296,13 @@ Rules:
 - `scripts/audit-harness.sh`: maturity audit logic.
 - `scripts/plan-harness.sh`: execution-plan generation.
 - `scripts/new-feature-spec.sh`: feature-level spec generation.
+- `scripts/resolve-task-context.sh`: task-to-context bundle resolution.
 - `scripts/check-doc-impact.sh`: diff-based code/doc consistency gate.
 - `scripts/validate-spec.sh`: project/feature spec validation.
+- `scripts/check-rollback-readiness.sh`: rollout/rollback readiness gate.
+- `scripts/harness-exec.sh`: prepare/verify/run orchestration.
 - `scripts/prepare-template-overrides.sh`: template export and discovery.
 - `scripts/check-template-drift.sh`: template drift and override audit.
+- `scripts/migrate-template-docs.sh`: backup-first historical template migration.
+- `scripts/collect-runtime-evidence.sh`: configurable runtime evidence capture.
+- `scripts/harness-gc.sh`: retention cleanup for runtime artifacts.

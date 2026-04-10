@@ -2,7 +2,7 @@
 
 兼容旧版 harness 流程的入口文档。
 
-当前项目级安全规范的主入口位于 `docs/project/SECURITY.md`。
+当前项目级安全规范的主入口位于 `docs/project/安全规范.md`。
 
 ## 敏感数据
 

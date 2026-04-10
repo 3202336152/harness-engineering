@@ -38,6 +38,34 @@ assert_json_number_gte "$output" ".violation_count" "1"
 assert_json_field "$output" '.violations[0].rule_id' "java-api-surface"
 teardown_test_dir
 
+it "suggests follow-up docs and writes an action plan for violations"
+setup_test_dir
+init_git_repo
+cat > pom.xml <<'EOF'
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>sample-app</artifactId>
+  <version>1.0.0</version>
+</project>
+EOF
+bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
+mkdir -p src/main/java/com/example/order/controller
+cat > src/main/java/com/example/order/controller/OrderController.java <<'EOF'
+package com.example.order.controller;
+
+public class OrderController {}
+EOF
+git add src/main/java/com/example/order/controller/OrderController.java
+output=$(bash "$REPO_ROOT/scripts/check-doc-impact.sh" --json --staged --suggest-actions --write-action-plan .harness/doc-actions.json 2>&1)
+status=$?
+assert_eq "1" "$status" "doc impact gate still fails when suggestions are enabled"
+assert_file_exists ".harness/doc-actions.json"
+assert_json_number_gte "$output" ".suggested_action_count" "1"
+assert_json_field "$output" '.suggested_actions[0].target_paths | index("docs/project/接口规范.md") != null' "true"
+assert_json_field "$(cat .harness/doc-actions.json)" ".status" "planned"
+teardown_test_dir
+
 it "passes when staged Java API changes include matching feature api spec updates"
 setup_test_dir
 init_git_repo
@@ -56,7 +84,7 @@ package com.example.order.controller;
 
 public class OrderController {}
 EOF
-cat > docs/features/FEAT-001-order-query/api-spec.md <<'EOF'
+cat > docs/features/FEAT-001-order-query/接口设计.md <<'EOF'
 ---
 id: FEAT-001
 title: 订单查询
@@ -75,13 +103,25 @@ template_language: zh-CN
 
 - GET /orders/{id}
 EOF
-git add src/main/java/com/example/order/controller/OrderController.java docs/features/FEAT-001-order-query/api-spec.md
+git add src/main/java/com/example/order/controller/OrderController.java docs/features/FEAT-001-order-query/接口设计.md
 output=$(bash "$REPO_ROOT/scripts/check-doc-impact.sh" --json --staged 2>&1)
 status=$?
 assert_success "$status" "doc impact gate passes when matching API docs are staged"
 assert_json_field "$output" ".status" "passed"
 assert_json_number_gte "$output" ".satisfied_rules_count" "1"
 assert_json_field "$output" '.satisfied_rules[0].rule_id' "java-api-surface"
+teardown_test_dir
+
+it "passes when there are no changed files"
+setup_test_dir
+init_git_repo
+bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
+output=$(bash "$REPO_ROOT/scripts/check-doc-impact.sh" --json 2>&1)
+status=$?
+assert_success "$status" "doc impact gate passes when no files changed"
+assert_json_field "$output" ".status" "passed"
+assert_json_field "$output" ".changed_files_count" "0"
+assert_json_field "$output" ".violation_count" "0"
 teardown_test_dir
 
 print_summary

@@ -28,7 +28,7 @@ init_git_repo
 bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
 bash "$REPO_ROOT/scripts/new-feature-spec.sh" --id FEAT-010 --title "Order Query" --owner alice --change-types api >/dev/null 2>&1
 
-cat > docs/project/ARCHITECTURE.md <<'EOF'
+cat > docs/project/项目架构.md <<'EOF'
 ---
 id: project-architecture
 title: 项目架构
@@ -56,7 +56,7 @@ controller / application / domain / infrastructure 四层分离。
 下单事务仅覆盖订单落库，消息通过 outbox 异步发送。
 EOF
 
-cat > docs/features/FEAT-010-order-query/overview.md <<'EOF'
+cat > docs/features/FEAT-010-order-query/功能概览.md <<'EOF'
 ---
 id: FEAT-010
 title: Order Query

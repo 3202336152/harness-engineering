@@ -5,11 +5,35 @@ set -euo pipefail
 CONFIG_PATH=".harness/spec-policy.json"
 OUTPUT_JSON=0
 STRICT_MODE=-1
+WRITE_FIX_PLAN=""
+AUTOFIX_SAFE=0
 
 MISSING_PROJECT_DOCS=()
 INVALID_FEATURES=()
 PROJECT_QUALITY_ISSUES=()
 FEATURE_QUALITY_ISSUES=()
+AUTOFIXED_FILES=()
+
+PROJECT_NAME="$(basename "$(pwd)")"
+OWNER="team"
+TODAY="$(date +%F)"
+STACK="unknown"
+SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DEFAULT_TEMPLATES_DIR="$SKILL_DIR/assets/templates"
+USER_TEMPLATE_ROOT="${HARNESS_TEMPLATE_ROOT:-}"
+TEMPLATE_PACK_NAME="${TEMPLATE_PACK_NAME_DEFAULT:-harness-engineering-default}"
+TEMPLATE_VERSION="${TEMPLATE_VERSION_DEFAULT:-1.1.0}"
+TEMPLATE_LANGUAGE="${TEMPLATE_LANGUAGE_DEFAULT:-zh-CN}"
+TEMPLATE_PROFILE="generic"
+PROFILE_DESCRIPTION=""
+
+# shellcheck source=scripts/lib/template-resolver.sh
+. "$SCRIPT_DIR/lib/template-resolver.sh"
+# shellcheck source=scripts/lib/template-profile.sh
+. "$SCRIPT_DIR/lib/template-profile.sh"
+# shellcheck source=scripts/lib/doc-paths.sh
+. "$SCRIPT_DIR/lib/doc-paths.sh"
 
 json_escape() {
   local text="$1"
@@ -50,7 +74,7 @@ append_safe_array_json() {
 
 usage() {
   cat <<'EOF'
-Usage: validate-spec.sh [--config <path>] [--json] [--strict]
+Usage: validate-spec.sh [--config <path>] [--json] [--strict] [--write-fix-plan <path>] [--autofix-safe]
 EOF
 }
 
@@ -67,6 +91,14 @@ parse_args() {
         ;;
       --strict)
         STRICT_MODE=1
+        shift
+        ;;
+      --write-fix-plan)
+        WRITE_FIX_PLAN="${2:-}"
+        shift 2
+        ;;
+      --autofix-safe)
+        AUTOFIX_SAFE=1
         shift
         ;;
       --help|-h)
@@ -142,6 +174,20 @@ record_quality_issue() {
   fi
 }
 
+mark_autofixed() {
+  local path="$1"
+  if [ "${#AUTOFIXED_FILES[@]}" -eq 0 ] || append_unique "$path" "${AUTOFIXED_FILES[@]}"; then
+    AUTOFIXED_FILES+=("$path")
+  fi
+}
+
+reset_results() {
+  MISSING_PROJECT_DOCS=()
+  INVALID_FEATURES=()
+  PROJECT_QUALITY_ISSUES=()
+  FEATURE_QUALITY_ISSUES=()
+}
+
 determine_strict_mode() {
   if [ "$STRICT_MODE" -ne -1 ]; then
     return
@@ -152,6 +198,44 @@ determine_strict_mode() {
   else
     STRICT_MODE=0
   fi
+}
+
+detect_stack() {
+  if [ -f package.json ]; then
+    STACK="node"
+  elif [ -f pom.xml ]; then
+    STACK="java-maven"
+  elif [ -f build.gradle ] || [ -f build.gradle.kts ]; then
+    STACK="java-gradle"
+  elif [ -f pyproject.toml ] || [ -f setup.py ]; then
+    STACK="python"
+  elif [ -f go.mod ]; then
+    STACK="go"
+  elif [ -f Cargo.toml ]; then
+    STACK="rust"
+  else
+    STACK="unknown"
+  fi
+}
+
+test_command() {
+  case "$STACK" in
+    node) printf 'npm test' ;;
+    java-maven) printf './mvnw clean test' ;;
+    java-gradle) printf './gradlew clean test' ;;
+    python) printf 'python -m pytest' ;;
+    go) printf 'go test ./...' ;;
+    rust) printf 'cargo test' ;;
+    *) printf '<test-command>' ;;
+  esac
+}
+
+load_template_pack_metadata() {
+  TEMPLATE_PACK_NAME="$(jq -r '.template_pack.name // "'"$TEMPLATE_PACK_NAME"'"' "$CONFIG_PATH")"
+  TEMPLATE_VERSION="$(jq -r '.template_pack.version // "'"$TEMPLATE_VERSION"'"' "$CONFIG_PATH")"
+  TEMPLATE_LANGUAGE="$(jq -r '.template_pack.language // "'"$TEMPLATE_LANGUAGE"'"' "$CONFIG_PATH")"
+  TEMPLATE_PROFILE="$(jq -r '.template_pack.profile // "'"$TEMPLATE_PROFILE"'"' "$CONFIG_PATH")"
+  PROFILE_DESCRIPTION="$(describe_template_profile "$TEMPLATE_PROFILE")"
 }
 
 check_placeholder_patterns() {
@@ -198,6 +282,7 @@ check_template_pack_consistency() {
 
 check_project_doc_quality() {
   local path="$1"
+  local config_path="$2"
   local field
   local section
   local actual
@@ -209,7 +294,7 @@ check_project_doc_quality() {
       record_quality_issue "project" "" "$path" "missing_frontmatter" "$field"
     fi
   done <<EOF
-$(jq -r --arg path "$path" '.project_docs[] | select(.path == $path) | .required_frontmatter[]?' "$CONFIG_PATH")
+$(jq -r --arg path "$config_path" '.project_docs[] | select(.path == $path) | .required_frontmatter[]?' "$CONFIG_PATH")
 EOF
 
   while IFS= read -r section; do
@@ -218,7 +303,7 @@ EOF
       record_quality_issue "project" "" "$path" "missing_section" "$section"
     fi
   done <<EOF
-$(jq -r --arg path "$path" '.project_docs[] | select(.path == $path) | .required_sections[]?' "$CONFIG_PATH")
+$(jq -r --arg path "$config_path" '.project_docs[] | select(.path == $path) | .required_sections[]?' "$CONFIG_PATH")
 EOF
 
   check_template_pack_consistency "project" "" "$path"
@@ -258,17 +343,19 @@ EOF
 
 check_project_docs() {
   local path
+  local actual_path
   local required
 
   while IFS=$'\t' read -r path required; do
     [ -n "$path" ] || continue
-    if [ "$required" = "true" ] && ! has_frontmatter "$path"; then
+    actual_path="$(first_existing_project_doc_by_path "$path" || true)"
+    if [ "$required" = "true" ] && ! has_frontmatter "$actual_path"; then
       MISSING_PROJECT_DOCS+=("$path")
       continue
     fi
 
-    if has_frontmatter "$path"; then
-      check_project_doc_quality "$path"
+    if has_frontmatter "$actual_path"; then
+      check_project_doc_quality "$actual_path" "$path"
     fi
   done <<EOF
 $(jq -r '.project_docs[] | [.path, (.required // false)] | @tsv' "$CONFIG_PATH")
@@ -278,7 +365,8 @@ EOF
 check_feature_dir() {
   local feature_dir="$1"
   local feature_name
-  local overview_file="$feature_dir/overview.md"
+  local overview_file=""
+  local overview_required_doc=""
   local change_types
   local doc
   local doc_path
@@ -288,9 +376,11 @@ check_feature_dir() {
   local missing_summary=""
 
   feature_name="$(basename "$feature_dir")"
+  overview_file="$(first_existing_feature_doc "$feature_dir" overview || true)"
+  overview_required_doc="$(jq -r '.feature_spec.required_docs[0] // "功能概览.md"' "$CONFIG_PATH")"
 
   if ! has_frontmatter "$overview_file"; then
-    INVALID_FEATURES+=("$feature_name|overview.md")
+    INVALID_FEATURES+=("$feature_name|$overview_required_doc")
     return
   fi
 
@@ -317,7 +407,7 @@ EOF
   done
 
   for doc in "${expected_docs[@]}"; do
-    doc_path="$feature_dir/$doc"
+    doc_path="$(first_existing_feature_doc_by_name "$feature_dir" "$doc" || true)"
     if ! has_frontmatter "$doc_path"; then
       missing_docs+=("$doc")
     else
@@ -330,6 +420,287 @@ EOF
     missing_summary="${missing_summary%,}"
     INVALID_FEATURES+=("$feature_name|$missing_summary")
   fi
+}
+
+evaluate_repo() {
+  local feature_base_dir
+  local feature_dir
+  CHECKED_FEATURES=0
+
+  reset_results
+  check_project_docs
+
+  feature_base_dir="$(jq -r '.feature_spec.base_dir // "docs/features"' "$CONFIG_PATH")"
+  if [ -d "$feature_base_dir" ]; then
+    while IFS= read -r feature_dir; do
+      [ -n "$feature_dir" ] || continue
+      CHECKED_FEATURES=$((CHECKED_FEATURES + 1))
+      check_feature_dir "$feature_dir"
+    done <<EOF
+$(find "$feature_base_dir" -mindepth 1 -maxdepth 1 -type d | sort)
+EOF
+  fi
+}
+
+determine_status() {
+  local invalid_count="$1"
+  local total_quality_count="$2"
+  local status="passed"
+
+  if [ "${#MISSING_PROJECT_DOCS[@]}" -gt 0 ] || [ "$invalid_count" -gt 0 ]; then
+    status="invalid"
+  fi
+  if [ "$STRICT_MODE" -eq 1 ] && [ "$total_quality_count" -gt 0 ]; then
+    status="invalid"
+  fi
+  printf '%s' "$status"
+}
+
+set_frontmatter_field() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+  local tmp
+
+  tmp="$(mktemp)"
+  awk -v target="$key" -v value="$value" '
+    BEGIN { in_frontmatter=0; inserted=0 }
+    NR == 1 && $0 !~ /^---$/ {
+      print "---"
+      print target ": " value
+      print "---"
+      print $0
+      next
+    }
+    /^---$/ {
+      if (in_frontmatter == 0) {
+        in_frontmatter=1
+        print
+        next
+      }
+      if (inserted == 0) {
+        print target ": " value
+        inserted=1
+      }
+      print
+      in_frontmatter=2
+      next
+    }
+    in_frontmatter == 1 && $0 ~ ("^" target ":") {
+      if (inserted == 0) {
+        print target ": " value
+        inserted=1
+      }
+      next
+    }
+    { print }
+    END {
+      if (NR == 0) {
+        print "---"
+        print target ": " value
+        print "---"
+      }
+    }
+  ' "$file" > "$tmp"
+  mv "$tmp" "$file"
+  mark_autofixed "$file"
+}
+
+ensure_section() {
+  local file="$1"
+  local section="$2"
+  if grep -Fq "$section" "$file" 2>/dev/null; then
+    return
+  fi
+  printf '\n%s\n\n待补充。\n' "$section" >> "$file"
+  mark_autofixed "$file"
+}
+
+render_project_doc() {
+  local path="$1"
+  local logical_template=""
+  local template_file=""
+  local content=""
+
+  if ! logical_template="$(project_template_file_for_path "$path")"; then
+    return 1
+  fi
+
+  if ! template_file="$(resolve_template_file "$logical_template")"; then
+    return 1
+  fi
+
+  content="$(cat "$template_file")"
+  content="${content//'{{PROJECT_NAME}}'/$PROJECT_NAME}"
+  content="${content//'{{DESCRIPTION}}'/Autofixed by validate-spec.sh.}"
+  content="${content//'{{OWNER}}'/$OWNER}"
+  content="${content//'{{DATE}}'/$TODAY}"
+  content="${content//'{{TEST_COMMAND}}'/$(test_command)}"
+  content="${content//'{{TEMPLATE_PACK_NAME}}'/$TEMPLATE_PACK_NAME}"
+  content="${content//'{{TEMPLATE_VERSION}}'/$TEMPLATE_VERSION}"
+  content="${content//'{{TEMPLATE_PROFILE}}'/$TEMPLATE_PROFILE}"
+  content="${content//'{{TEMPLATE_LANGUAGE}}'/$TEMPLATE_LANGUAGE}"
+  content="${content//'{{PROFILE_DESCRIPTION}}'/$PROFILE_DESCRIPTION}"
+  mkdir -p "$(dirname "$path")"
+  printf '%s\n' "$content" > "$path"
+  mark_autofixed "$path"
+}
+
+render_feature_doc() {
+  local feature_dir="$1"
+  local doc_name="$2"
+  local target="$feature_dir/$doc_name"
+  local overview_file=""
+  local feature_id=""
+  local feature_title=""
+  local feature_owner=""
+  local change_types=""
+  local logical_template=""
+  local template_file=""
+  local content=""
+
+  overview_file="$(first_existing_feature_doc "$feature_dir" overview || true)"
+  feature_id="$(extract_frontmatter_value "$overview_file" "id")"
+  feature_title="$(extract_frontmatter_value "$overview_file" "title")"
+  feature_owner="$(extract_frontmatter_value "$overview_file" "owner")"
+  change_types="$(extract_frontmatter_value "$overview_file" "change_types")"
+
+  if [ -z "$feature_id" ]; then
+    feature_id="$(basename "$feature_dir" | cut -d- -f1)"
+  fi
+  if [ -z "$feature_title" ]; then
+    feature_title="$(basename "$feature_dir")"
+  fi
+  if [ -z "$feature_owner" ]; then
+    feature_owner="$OWNER"
+  fi
+
+  if ! logical_template="$(feature_template_file_for_doc "$doc_name")"; then
+    return 1
+  fi
+
+  if ! template_file="$(resolve_template_file "$logical_template")"; then
+    return 1
+  fi
+
+  content="$(cat "$template_file")"
+  content="${content//'{{FEATURE_ID}}'/$feature_id}"
+  content="${content//'{{FEATURE_TITLE}}'/$feature_title}"
+  content="${content//'{{OWNER}}'/$feature_owner}"
+  content="${content//'{{CHANGE_TYPES}}'/$change_types}"
+  content="${content//'{{DATE}}'/$TODAY}"
+  content="${content//'{{TEMPLATE_PACK_NAME}}'/$TEMPLATE_PACK_NAME}"
+  content="${content//'{{TEMPLATE_VERSION}}'/$TEMPLATE_VERSION}"
+  content="${content//'{{TEMPLATE_PROFILE}}'/$TEMPLATE_PROFILE}"
+  content="${content//'{{TEMPLATE_LANGUAGE}}'/$TEMPLATE_LANGUAGE}"
+  content="${content//'{{PROFILE_DESCRIPTION}}'/$PROFILE_DESCRIPTION}"
+  printf '%s\n' "$content" > "$target"
+  mark_autofixed "$target"
+}
+
+autofix_missing_project_docs() {
+  local path
+  for path in "${MISSING_PROJECT_DOCS[@]-}"; do
+    [ -n "$path" ] || continue
+    render_project_doc "$path" || true
+  done
+}
+
+autofix_missing_feature_docs() {
+  local record
+  local feature
+  local missing
+  local doc
+  local feature_base_dir
+  local feature_dir
+
+  feature_base_dir="$(jq -r '.feature_spec.base_dir // "docs/features"' "$CONFIG_PATH")"
+  for record in "${INVALID_FEATURES[@]-}"; do
+    [ -n "$record" ] || continue
+    feature="${record%%|*}"
+    missing="${record#*|}"
+    feature_dir="$feature_base_dir/$feature"
+    [ -d "$feature_dir" ] || continue
+    for doc in $(printf '%s' "$missing" | tr ',' ' '); do
+      [ -n "$doc" ] || continue
+      render_feature_doc "$feature_dir" "$doc" || true
+    done
+  done
+}
+
+expected_value_for_field() {
+  case "$1" in
+    template_version) printf '%s' "$TEMPLATE_VERSION" ;;
+    template_profile) printf '%s' "$TEMPLATE_PROFILE" ;;
+    template_language) printf '%s' "$TEMPLATE_LANGUAGE" ;;
+    last_updated) printf '%s' "$TODAY" ;;
+    owner) printf '%s' "$OWNER" ;;
+    *) printf '' ;;
+  esac
+}
+
+autofix_quality_issues() {
+  local record
+  local path
+  local rest
+  local kind
+  local detail
+  local feature
+  local field
+  local value
+  local expected
+
+  for record in "${PROJECT_QUALITY_ISSUES[@]-}"; do
+    [ -n "$record" ] || continue
+    path="${record%%|*}"
+    rest="${record#*|}"
+    kind="${rest%%|*}"
+    detail="${rest#*|}"
+    case "$kind" in
+      missing_frontmatter)
+        value="$(expected_value_for_field "$detail")"
+        [ -n "$value" ] && set_frontmatter_field "$path" "$detail" "$value"
+        ;;
+      missing_section)
+        ensure_section "$path" "$detail"
+        ;;
+      frontmatter_mismatch)
+        field="${detail%%=*}"
+        expected="${detail##*expected=}"
+        [ -n "$field" ] && [ -n "$expected" ] && set_frontmatter_field "$path" "$field" "$expected"
+        ;;
+    esac
+  done
+
+  for record in "${FEATURE_QUALITY_ISSUES[@]-}"; do
+    [ -n "$record" ] || continue
+    feature="${record%%|*}"
+    rest="${record#*|}"
+    path="${rest%%|*}"
+    rest="${rest#*|}"
+    kind="${rest%%|*}"
+    detail="${rest#*|}"
+    case "$kind" in
+      missing_frontmatter)
+        value="$(expected_value_for_field "$detail")"
+        [ -n "$value" ] && set_frontmatter_field "$path" "$detail" "$value"
+        ;;
+      missing_section)
+        ensure_section "$path" "$detail"
+        ;;
+      frontmatter_mismatch)
+        field="${detail%%=*}"
+        expected="${detail##*expected=}"
+        [ -n "$field" ] && [ -n "$expected" ] && set_frontmatter_field "$path" "$field" "$expected"
+        ;;
+    esac
+  done
+}
+
+perform_autofix() {
+  autofix_missing_project_docs
+  autofix_missing_feature_docs
+  autofix_quality_issues
 }
 
 emit_project_quality_issues_json() {
@@ -390,6 +761,58 @@ emit_feature_quality_issues_json() {
   printf ']'
 }
 
+emit_fix_actions_json() {
+  local first=1
+  local path
+  local record
+  local feature
+  local missing
+  local doc
+  local feature_base_dir
+
+  feature_base_dir="$(jq -r '.feature_spec.base_dir // "docs/features"' "$CONFIG_PATH")"
+
+  printf '['
+  for path in "${MISSING_PROJECT_DOCS[@]-}"; do
+    [ -n "$path" ] || continue
+    if [ "$first" -eq 0 ]; then
+      printf ','
+    fi
+    first=0
+    printf '{"action":"create_project_doc","path":"%s"}' "$(json_escape "$path")"
+  done
+
+  for record in "${INVALID_FEATURES[@]-}"; do
+    [ -n "$record" ] || continue
+    feature="${record%%|*}"
+    missing="${record#*|}"
+    for doc in $(printf '%s' "$missing" | tr ',' ' '); do
+      [ -n "$doc" ] || continue
+      if [ "$first" -eq 0 ]; then
+        printf ','
+      fi
+      first=0
+      printf '{"action":"create_feature_doc","feature":"%s","path":"%s"}' \
+        "$(json_escape "$feature")" \
+        "$(json_escape "$feature_base_dir/$feature/$doc")"
+    done
+  done
+  printf ']'
+}
+
+write_fix_plan() {
+  local output_path="$1"
+  [ -n "$output_path" ] || return 0
+
+  mkdir -p "$(dirname "$output_path")"
+  printf '{\n' > "$output_path"
+  printf '  "status": "planned",\n' >> "$output_path"
+  printf '  "config_path": "%s",\n' "$(json_escape "$CONFIG_PATH")" >> "$output_path"
+  printf '  "actions": ' >> "$output_path"
+  emit_fix_actions_json >> "$output_path"
+  printf '\n}\n' >> "$output_path"
+}
+
 emit_json() {
   local status="$1"
   local invalid_count="$2"
@@ -410,6 +833,13 @@ emit_json() {
     "$(json_escape "$(jq -r '.template_pack.version // ""' "$CONFIG_PATH")")" \
     "$(json_escape "$(jq -r '.template_pack.profile // ""' "$CONFIG_PATH")")" \
     "$(json_escape "$(jq -r '.template_pack.language // ""' "$CONFIG_PATH")")"
+  printf '"autofix_count":%s,' "${#AUTOFIXED_FILES[@]}"
+  printf '"autofixed_files":'
+  append_safe_array_json "AUTOFIXED_FILES"
+  if [ -n "$WRITE_FIX_PLAN" ]; then
+    printf ',"fix_plan_path":"%s"' "$(json_escape "$WRITE_FIX_PLAN")"
+  fi
+  printf ','
   printf '"project":{"missing_required_docs_count":%s,"missing_required_docs":' "${#MISSING_PROJECT_DOCS[@]}"
   append_safe_array_json "MISSING_PROJECT_DOCS"
   printf ',"quality_issue_count":%s,"quality_issues":' "$project_quality_count"
@@ -426,11 +856,7 @@ emit_json() {
       fi
       first=0
       printf '{"feature":"%s","missing_docs":' "$(json_escape "$feature")"
-      if [ "$missing" = "$record" ]; then
-        append_array_json
-      else
-        append_array_json $(printf '%s' "$missing" | tr ',' ' ')
-      fi
+      append_array_json $(printf '%s' "$missing" | tr ',' ' ')
       printf '}'
     done
   fi
@@ -446,18 +872,16 @@ emit_text() {
   local checked_features="$3"
   local total_quality_count=$(( ${#PROJECT_QUALITY_ISSUES[@]} + ${#FEATURE_QUALITY_ISSUES[@]} ))
 
-  printf 'Spec validation %s. Missing project docs: %s. Invalid feature dirs: %s/%s. Quality issues: %s. Strict mode: %s.\n' \
+  printf 'Spec validation %s. Missing project docs: %s. Invalid feature dirs: %s/%s. Quality issues: %s. Strict mode: %s. Autofixed files: %s.\n' \
     "$status" "${#MISSING_PROJECT_DOCS[@]}" "$invalid_count" "$checked_features" "$total_quality_count" \
-    "$( [ "$STRICT_MODE" -eq 1 ] && printf 'true' || printf 'false' )"
+    "$( [ "$STRICT_MODE" -eq 1 ] && printf 'true' || printf 'false' )" "${#AUTOFIXED_FILES[@]}"
 }
 
 main() {
-  local feature_base_dir
-  local feature_dir
-  local checked_features=0
   local invalid_count=0
   local total_quality_count=0
   local status="passed"
+  local initial_status="passed"
 
   parse_args "$@"
   require_jq
@@ -467,33 +891,33 @@ main() {
     exit 1
   fi
 
+  detect_stack
+  load_template_pack_metadata
+  init_template_resolver "$DEFAULT_TEMPLATES_DIR" "$USER_TEMPLATE_ROOT" ".harness/templates"
   determine_strict_mode
-  check_project_docs
-
-  feature_base_dir="$(jq -r '.feature_spec.base_dir // "docs/features"' "$CONFIG_PATH")"
-  if [ -d "$feature_base_dir" ]; then
-    while IFS= read -r feature_dir; do
-      [ -n "$feature_dir" ] || continue
-      checked_features=$((checked_features + 1))
-      check_feature_dir "$feature_dir"
-    done <<EOF
-$(find "$feature_base_dir" -mindepth 1 -maxdepth 1 -type d | sort)
-EOF
-  fi
+  evaluate_repo
 
   invalid_count="${#INVALID_FEATURES[@]}"
   total_quality_count=$(( ${#PROJECT_QUALITY_ISSUES[@]} + ${#FEATURE_QUALITY_ISSUES[@]} ))
-  if [ "${#MISSING_PROJECT_DOCS[@]}" -gt 0 ] || [ "$invalid_count" -gt 0 ]; then
-    status="invalid"
-  fi
-  if [ "$STRICT_MODE" -eq 1 ] && [ "$total_quality_count" -gt 0 ]; then
-    status="invalid"
+  initial_status="$(determine_status "$invalid_count" "$total_quality_count")"
+
+  if [ -n "$WRITE_FIX_PLAN" ] && [ "$initial_status" != "passed" ]; then
+    write_fix_plan "$WRITE_FIX_PLAN"
   fi
 
+  if [ "$AUTOFIX_SAFE" -eq 1 ] && [ "$initial_status" != "passed" ]; then
+    perform_autofix
+    evaluate_repo
+    invalid_count="${#INVALID_FEATURES[@]}"
+    total_quality_count=$(( ${#PROJECT_QUALITY_ISSUES[@]} + ${#FEATURE_QUALITY_ISSUES[@]} ))
+  fi
+
+  status="$(determine_status "$invalid_count" "$total_quality_count")"
+
   if [ "$OUTPUT_JSON" -eq 1 ]; then
-    emit_json "$status" "$invalid_count" "$checked_features"
+    emit_json "$status" "$invalid_count" "$CHECKED_FEATURES"
   else
-    emit_text "$status" "$invalid_count" "$checked_features"
+    emit_text "$status" "$invalid_count" "$CHECKED_FEATURES"
   fi
 
   if [ "$status" = "passed" ]; then

@@ -24,6 +24,8 @@ PROFILE_DESCRIPTION=""
 . "$SCRIPT_DIR/lib/template-resolver.sh"
 # shellcheck source=scripts/lib/template-profile.sh
 . "$SCRIPT_DIR/lib/template-profile.sh"
+# shellcheck source=scripts/lib/doc-paths.sh
+. "$SCRIPT_DIR/lib/doc-paths.sh"
 
 CREATED_FILES=()
 CREATED_DIRS=()
@@ -233,7 +235,13 @@ create_directories() {
     docs/product-specs \
     docs/references \
     .github \
-    .harness; do
+    .harness \
+    .harness/runtime \
+    .harness/runtime/context \
+    .harness/runs \
+    .harness/evidence \
+    .harness/metrics \
+    .harness/migrations; do
     if [ "$DRY_RUN" -eq 1 ]; then
       CREATED_DIRS+=("$dir")
     else
@@ -283,22 +291,29 @@ render_template() {
 generate_files() {
   render_template "AGENTS.md.tpl" "AGENTS.md"
   render_template "CLAUDE.md.tpl" "CLAUDE.md"
-  render_template "ARCHITECTURE.md.tpl" "docs/ARCHITECTURE.md"
-  render_template "CONVENTIONS.md.tpl" "docs/CONVENTIONS.md"
-  render_template "TESTING.md.tpl" "docs/TESTING.md"
-  render_template "SECURITY.md.tpl" "docs/SECURITY.md"
-  render_template "project/ARCHITECTURE.md.tpl" "docs/project/ARCHITECTURE.md"
-  render_template "project/DESIGN.md.tpl" "docs/project/DESIGN.md"
-  render_template "project/API-SPEC.md.tpl" "docs/project/API-SPEC.md"
-  render_template "project/DEVELOPMENT.md.tpl" "docs/project/DEVELOPMENT.md"
-  render_template "project/REQUIREMENTS.md.tpl" "docs/project/REQUIREMENTS.md"
-  render_template "project/TESTING.md.tpl" "docs/project/TESTING.md"
-  render_template "project/SECURITY.md.tpl" "docs/project/SECURITY.md"
+  render_template "ARCHITECTURE.md.tpl" "$(project_index_doc_path architecture-index)"
+  render_template "CONVENTIONS.md.tpl" "$(project_index_doc_path conventions-index)"
+  render_template "TESTING.md.tpl" "$(project_index_doc_path testing-index)"
+  render_template "SECURITY.md.tpl" "$(project_index_doc_path security-index)"
+  render_template "project/ARCHITECTURE.md.tpl" "$(project_doc_path architecture)"
+  render_template "project/DESIGN.md.tpl" "$(project_doc_path design)"
+  render_template "project/API-SPEC.md.tpl" "$(project_doc_path api-spec)"
+  render_template "project/DEVELOPMENT.md.tpl" "$(project_doc_path development)"
+  render_template "project/REQUIREMENTS.md.tpl" "$(project_doc_path requirements)"
+  render_template "project/TESTING.md.tpl" "$(project_doc_path testing)"
+  render_template "project/SECURITY.md.tpl" "$(project_doc_path security)"
+  render_template "project/OPERATIONS.md.tpl" "$(project_doc_path operations)"
+  render_template "project/OBSERVABILITY.md.tpl" "$(project_doc_path observability)"
   render_template "PR_TEMPLATE.md.tpl" ".github/PULL_REQUEST_TEMPLATE.md"
-  render_template "core-beliefs.md.tpl" "docs/design-docs/core-beliefs.md"
+  render_template "core-beliefs.md.tpl" "$(design_doc_path core-beliefs)"
   render_template "architecture.json.tpl" ".harness/architecture.json"
   render_template "spec-policy.json.tpl" ".harness/spec-policy.json"
   render_template "doc-impact-rules.json.tpl" ".harness/doc-impact-rules.json"
+  render_template "context-policy.json.tpl" ".harness/context-policy.json"
+  render_template "run-policy.json.tpl" ".harness/run-policy.json"
+  render_template "observability-policy.json.tpl" ".harness/observability-policy.json"
+  render_template "task-memory.json.tpl" ".harness/runtime/task-memory.json"
+  render_template "progress.md.tpl" ".harness/runtime/progress.md"
 }
 
 output_report() {
@@ -318,12 +333,16 @@ output_report() {
   printf '"next_steps":'
   append_array_json \
     "Edit AGENTS.md to add project-specific architecture details" \
-    "Fill in docs/project/ARCHITECTURE.md and docs/project/REQUIREMENTS.md with project-specific context" \
+    "Fill in $(project_doc_path architecture) and $(project_doc_path requirements) with project-specific context" \
     "Review .harness/spec-policy.json to align required project-level and feature-level specs" \
     "Review .harness/doc-impact-rules.json so code changes and doc updates can be gated together" \
+    "Review .harness/context-policy.json and .harness/run-policy.json before enabling autonomous workflows" \
+    "Review .harness/observability-policy.json so logs, metrics, and traces can be captured into evidence bundles" \
     "Create your first feature spec with bash scripts/new-feature-spec.sh --id FEAT-001 --title \"Your feature\" --owner <name> --change-types <types>" \
+    "Use bash scripts/harness-exec.sh prepare --task \"Your feature\" --feature-id FEAT-001 --title \"Your feature\" to generate plan and context together" \
+    "Use bash scripts/migrate-template-docs.sh --json after template upgrades to back up and migrate historical docs" \
     "Run bash scripts/validate-spec.sh --json before wiring spec checks into CI" \
-    "Add doc impact checks, architecture linting, and spec validation to your CI pipeline"
+    "Add doc impact checks, architecture linting, spec validation, and harness GC to your CI pipeline"
   printf '}\n'
 }
 
