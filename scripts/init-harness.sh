@@ -41,6 +41,7 @@ RESOLVED_ENTRY_FILES=()
 CREATED_FILES=()
 CREATED_DIRS=()
 SKIPPED_FILES=()
+HYDRATION_REQUIRED_DOCS=()
 
 architecture_layers_json() {
   case "$TEMPLATE_PROFILE" in
@@ -127,6 +128,23 @@ EOF
       printf '[]'
       ;;
   esac
+}
+
+profile_uses_java_hydration_gate() {
+  case "$TEMPLATE_PROFILE" in
+    java-backend-service|java-batch-job|java-adapter)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+strict_default_value() {
+  if profile_uses_java_hydration_gate; then
+    printf 'true'
+  else
+    printf 'false'
+  fi
 }
 
 append_array_json() {
@@ -289,6 +307,10 @@ prepare_guardrail_options() {
   if [ "$WITH_STRONG_CONSTRAINTS" -eq 1 ]; then
     WITH_GIT_HOOK=1
     WITH_GITHUB_ACTIONS=1
+    WITH_STRICT_SPEC_CHECKS=1
+  fi
+
+  if profile_uses_java_hydration_gate && { [ "$WITH_GIT_HOOK" -eq 1 ] || [ "$WITH_HUSKY" -eq 1 ]; } && [ "$WITH_STRICT_SPEC_CHECKS" -eq 0 ]; then
     WITH_STRICT_SPEC_CHECKS=1
   fi
 }
@@ -474,6 +496,55 @@ validate_spec_flags() {
   fi
 }
 
+append_hydration_required_doc() {
+  local path="$1"
+
+  [ -n "$path" ] || return 0
+  if [ "${#HYDRATION_REQUIRED_DOCS[@]}" -eq 0 ] || append_unique_value "$path" "${HYDRATION_REQUIRED_DOCS[@]}"; then
+    HYDRATION_REQUIRED_DOCS+=("$path")
+  fi
+}
+
+project_hydration_doc_paths() {
+  cat <<EOF
+$(project_doc_path core-beliefs)
+$(project_doc_path architecture)
+$(project_doc_path design)
+$(project_doc_path api-spec)
+$(project_doc_path development)
+$(project_doc_path requirements)
+$(project_doc_path testing)
+$(project_doc_path security)
+$(project_doc_path operations)
+$(project_doc_path observability)
+EOF
+}
+
+collect_hydration_required_docs() {
+  local path=""
+
+  HYDRATION_REQUIRED_DOCS=()
+
+  if [ "$DRY_RUN" -eq 1 ]; then
+    while IFS= read -r path; do
+      append_hydration_required_doc "$path"
+    done <<EOF
+$(project_hydration_doc_paths)
+EOF
+    return 0
+  fi
+
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    [ -f "$path" ] || continue
+    if grep -Eq '^doc_state:[[:space:]]*scaffold([[:space:]]*)$' "$path" 2>/dev/null; then
+      append_hydration_required_doc "$path"
+    fi
+  done <<EOF
+$(project_hydration_doc_paths)
+EOF
+}
+
 create_directories() {
   local dir
   for dir in \
@@ -554,6 +625,7 @@ render_content() {
   content="${content//'{{TEMPLATE_VERSION}}'/$TEMPLATE_VERSION}"
   content="${content//'{{TEMPLATE_PROFILE}}'/$TEMPLATE_PROFILE}"
   content="${content//'{{TEMPLATE_LANGUAGE}}'/$TEMPLATE_LANGUAGE}"
+  content="${content//'{{STRICT_DEFAULT}}'/$(strict_default_value)}"
   content="${content//'{{PROFILE_DESCRIPTION}}'/$PROFILE_DESCRIPTION}"
   content="${content//'{{HARNESS_SKILL_ROOT}}'/$VENDORED_SKILL_ROOT}"
   content="${content//'{{HARNESS_VALIDATE_SPEC_FLAGS}}'/$(validate_spec_flags)}"
@@ -858,9 +930,16 @@ output_report() {
   append_array_json "${enabled_guardrails[@]-}"
   printf ','
   printf '"detected_stack":"%s",' "$(json_escape "$STACK")"
+  printf '"hydration_required_count":%s,' "${#HYDRATION_REQUIRED_DOCS[@]}"
+  printf '"hydration_required_docs":'
+  append_tracked_array_json "HYDRATION_REQUIRED_DOCS"
+  printf ','
   printf '"next_steps":'
   if [ "$java_stack_recommended" -eq 1 ] && [ "$WITH_STRONG_CONSTRAINTS" -eq 0 ] && [ "$WITH_GIT_HOOK" -eq 0 ] && [ "$WITH_HUSKY" -eq 0 ] && [ "$WITH_GITHUB_ACTIONS" -eq 0 ]; then
     append_array_json \
+      "Treat any project doc that still has doc_state: scaffold as a template only; do not use it as project truth yet" \
+      "After hydrating a project doc from real code, update its frontmatter from doc_state: scaffold to doc_state: hydrated" \
+      "Use the hydration_required_docs list from this init output as the minimum project doc set that still needs real repository content" \
       "Review the generated entry doc(s) and add project-specific architecture details" \
       "Refresh the Java inventory with bash scripts/scan-java-project.sh --json before hydrating project docs after major code changes" \
       "After init, have the coding agent read key project files before filling docs/project/; do not rely on guesses" \
@@ -872,12 +951,16 @@ output_report() {
       "Review .harness/observability-policy.json so logs, metrics, and traces can be captured into evidence bundles" \
       "Create your first feature spec with bash scripts/new-feature-spec.sh --id FEAT-001 --title \"Your feature\" --owner <name> --change-types <types>" \
       "Use bash scripts/harness-exec.sh prepare --task \"Your feature\" --feature-id FEAT-001 --title \"Your feature\" to generate plan and context together" \
+      "For Java profiles, validate-spec now defaults to strict doc-state enforcement; scaffold docs will fail validation until hydrated" \
       "For Java projects, prefer rerunning init with --with-strong-constraints so local commits and CI can block spec drift automatically" \
       "Use bash scripts/migrate-template-docs.sh --json after template upgrades to back up and migrate historical docs" \
       "Run bash scripts/validate-spec.sh --json --strict after project docs are hydrated, then wire spec checks into CI" \
       "Add doc impact checks, architecture linting, spec validation, and harness GC to your CI pipeline"
   else
     append_array_json \
+      "Treat any project doc that still has doc_state: scaffold as a template only; do not use it as project truth yet" \
+      "After hydrating a project doc from real code, update its frontmatter from doc_state: scaffold to doc_state: hydrated" \
+      "Use the hydration_required_docs list from this init output as the minimum project doc set that still needs real repository content" \
       "Review the generated entry doc(s) and add project-specific architecture details" \
       "$( [ "$java_stack_recommended" -eq 1 ] && printf '%s' 'Refresh the Java inventory with bash scripts/scan-java-project.sh --json before hydrating project docs after major code changes' )" \
       "After init, have the coding agent read key project files before filling docs/project/; do not rely on guesses" \
@@ -889,6 +972,7 @@ output_report() {
       "Review .harness/observability-policy.json so logs, metrics, and traces can be captured into evidence bundles" \
       "Create your first feature spec with bash scripts/new-feature-spec.sh --id FEAT-001 --title \"Your feature\" --owner <name> --change-types <types>" \
       "Use bash scripts/harness-exec.sh prepare --task \"Your feature\" --feature-id FEAT-001 --title \"Your feature\" to generate plan and context together" \
+      "$( [ "$java_stack_recommended" -eq 1 ] && printf '%s' 'For Java profiles, validate-spec now defaults to strict doc-state enforcement; scaffold docs will fail validation until hydrated' )" \
       "Use bash scripts/migrate-template-docs.sh --json after template upgrades to back up and migrate historical docs" \
       "Run bash scripts/validate-spec.sh --json --strict after project docs are hydrated, then wire spec checks into CI" \
       "Add doc impact checks, architecture linting, spec validation, and harness GC to your CI pipeline"
@@ -898,12 +982,13 @@ output_report() {
 
 main() {
   parse_args "$@"
-  prepare_guardrail_options
   resolve_entry_documents
   init_template_resolver "$DEFAULT_TEMPLATES_DIR" "$USER_TEMPLATE_ROOT" ".harness/templates"
   detect_environment
+  prepare_guardrail_options
   create_directories
   generate_files
+  collect_hydration_required_docs
   output_report
 }
 

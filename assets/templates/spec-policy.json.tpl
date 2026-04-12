@@ -6,7 +6,8 @@
     "language": "{{TEMPLATE_LANGUAGE}}"
   },
   "quality_gate": {
-    "strict_default": false,
+    "strict_default": {{STRICT_DEFAULT}},
+    "require_hydrated_doc_state": true,
     "placeholder_patterns": [
       "TODO:",
       "待补充",

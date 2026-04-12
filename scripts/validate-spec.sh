@@ -28,6 +28,7 @@ TEMPLATE_VERSION="${TEMPLATE_VERSION_DEFAULT:-1.1.0}"
 TEMPLATE_LANGUAGE="${TEMPLATE_LANGUAGE_DEFAULT:-zh-CN}"
 TEMPLATE_PROFILE="generic"
 PROFILE_DESCRIPTION=""
+REQUIRE_HYDRATED_DOC_STATE=0
 
 # shellcheck source=scripts/lib/template-resolver.sh
 . "$SCRIPT_DIR/lib/template-resolver.sh"
@@ -239,6 +240,14 @@ load_template_pack_metadata() {
   PROFILE_DESCRIPTION="$(describe_template_profile "$TEMPLATE_PROFILE")"
 }
 
+load_quality_gate_metadata() {
+  if [ "$(jq -r '.quality_gate.require_hydrated_doc_state // false' "$CONFIG_PATH")" = "true" ]; then
+    REQUIRE_HYDRATED_DOC_STATE=1
+  else
+    REQUIRE_HYDRATED_DOC_STATE=0
+  fi
+}
+
 java_doc_coverage_enabled() {
   case "$TEMPLATE_PROFILE" in
     java-backend-service|java-batch-job|java-adapter)
@@ -381,6 +390,36 @@ $(jq -r '.quality_gate.placeholder_patterns[]?' "$CONFIG_PATH")
 EOF
 }
 
+check_doc_state() {
+  local scope="$1"
+  local feature="$2"
+  local file="$3"
+  local doc_state=""
+
+  if [ "$REQUIRE_HYDRATED_DOC_STATE" -ne 1 ]; then
+    return 0
+  fi
+
+  doc_state="$(extract_frontmatter_value "$file" "doc_state")"
+  if [ -z "$doc_state" ]; then
+    record_quality_issue "$scope" "$feature" "$file" "missing_frontmatter" "doc_state"
+    return 0
+  fi
+
+  case "$doc_state" in
+    scaffold|hydrated)
+      ;;
+    *)
+      record_quality_issue "$scope" "$feature" "$file" "invalid_doc_state" "$doc_state"
+      return 0
+      ;;
+  esac
+
+  if [ "$STRICT_MODE" -eq 1 ] && [ "$doc_state" != "hydrated" ]; then
+    record_quality_issue "$scope" "$feature" "$file" "doc_not_hydrated" "$doc_state"
+  fi
+}
+
 check_template_pack_consistency() {
   local scope="$1"
   local feature="$2"
@@ -433,6 +472,7 @@ EOF
 $(jq -r --arg path "$config_path" '.project_docs[] | select(.path == $path) | .required_sections[]?' "$CONFIG_PATH")
 EOF
 
+  check_doc_state "project" "" "$path"
   check_template_pack_consistency "project" "" "$path"
   check_placeholder_patterns "project" "" "$path"
 }
@@ -464,6 +504,7 @@ EOF
 $(jq -r --arg doc "$doc_name" '.feature_spec.doc_rules[$doc].required_sections[]?' "$CONFIG_PATH")
 EOF
 
+  check_doc_state "feature" "$feature" "$path"
   check_template_pack_consistency "feature" "$feature" "$path"
   check_placeholder_patterns "feature" "$feature" "$path"
 }
@@ -762,6 +803,7 @@ expected_value_for_field() {
     template_version) printf '%s' "$TEMPLATE_VERSION" ;;
     template_profile) printf '%s' "$TEMPLATE_PROFILE" ;;
     template_language) printf '%s' "$TEMPLATE_LANGUAGE" ;;
+    doc_state) printf 'scaffold' ;;
     last_updated) printf '%s' "$TODAY" ;;
     owner) printf '%s' "$OWNER" ;;
     *) printf '' ;;
@@ -1022,6 +1064,7 @@ main() {
 
   detect_stack
   load_template_pack_metadata
+  load_quality_gate_metadata
   init_template_resolver "$DEFAULT_TEMPLATES_DIR" "$USER_TEMPLATE_ROOT" ".harness/templates"
   determine_strict_mode
   evaluate_repo

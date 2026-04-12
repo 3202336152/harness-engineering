@@ -57,12 +57,14 @@
 ## 初始化后项目文档补全
 
 - `bash scripts/init-harness.sh` 只负责生成骨架和策略文件，不会替代你理解整个项目。
+- `docs/project/*.md` 和 `docs/features/*/*.md` 新生成时默认会带 `doc_state: scaffold`，这表示它们只是骨架，不是已经核实过的项目真相。
 - 对 Java 项目，先运行或刷新 `bash scripts/scan-java-project.sh --json`，确保 `.harness/runtime/java-doc-scan.json` 是最新的。
 - 先把扫描结果当成“全量清单”：至少校对 `module_paths`、`package_roots`、`controllers`、`listeners`、`jobs`、`clients`、`application_services`、`domain_services` 是否完整。
 - 在补全 `docs/project/` 前，当前编码代理必须先读取扫描清单和关键文件，禁止依赖猜测或只看单个类就下结论。
 - 关键深读清单：`pom.xml` / `build.gradle*`、启动类或主入口、`src/main/java` 前两层包结构、主要 `Controller` / `Facade` / `Listener` / `Job`、核心 `ApplicationService` / `DomainService`、`application.yml` / `application-*.yml`。
 - 不要求把所有源码全文一次性塞进上下文，但必须先完成全量扫描，再对代表性入口、核心链路、关键配置和主要外部集成点做针对性深读。
-- `bash scripts/validate-spec.sh --json --strict` 会基于 Java 扫描基线检查项目文档是否遗漏关键模块、入口、服务和外部依赖。
+- 补全并核实真实内容后，再把对应文档 frontmatter 里的 `doc_state: scaffold` 改成 `doc_state: hydrated`。
+- `bash scripts/validate-spec.sh --json --strict` 会检查 `doc_state` 是否已变为 `hydrated`；对 Java 画像，`validate-spec --json` 默认也会走 strict 门禁，并额外基于扫描基线检查项目文档是否遗漏关键模块、入口、服务和外部依赖。
 - 如果仍有未确认的信息，在文档里明确标记“待确认 / 未覆盖范围”，不要编造事实来补满模板。
 
 ## Java 项目补充提示

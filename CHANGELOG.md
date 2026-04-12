@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added `doc_state: scaffold|hydrated` governance for generated project and feature docs, plus strict validation that blocks scaffold docs from passing as completed specs.
+- `init-harness.sh` now reports `hydration_required_count` and `hydration_required_docs` so hosts can see which project docs still need code-backed hydration.
+- Java profile initialization now defaults policy `strict_default` to true and automatically upgrades local hook/Husky spec checks to strict mode.
 - Generic project spec templates now use language-neutral section headers instead of Java-only required section names.
 - Added stronger strict-mode placeholder detection for common English and templating markers such as `TBD`, `FIXME`, and `{{TODO}}`.
 - Extended `/harness plan` documentation with the stdout JSON contract and clarified the separate machine-plan schema.

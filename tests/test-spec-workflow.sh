@@ -27,6 +27,7 @@ assert_file_exists "docs/features/FEAT-001-user-search/manifest.json"
 assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "id: FEAT-001"
 assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "template_version: 1.1.0"
 assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "template_profile: generic"
+assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "doc_state: scaffold"
 assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "# 功能概览"
 assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "## 业务背景与目标"
 assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "## 当前现状与边界"
@@ -75,6 +76,7 @@ assert_eq "1" "$status" "strict validation fails on placeholder content"
 assert_json_field "$output" ".status" "invalid"
 assert_json_field "$output" ".strict_mode" "true"
 assert_json_number_gte "$output" ".quality.total_issue_count" "1"
+assert_json_field "$output" '.project.quality_issues | map(select(.kind == "doc_not_hydrated")) | length >= 1' "true"
 teardown_test_dir
 
 it "passes strict validation when required sections and metadata are complete"
@@ -91,6 +93,7 @@ cat > .harness/spec-policy.json <<'EOF'
   },
   "quality_gate": {
     "strict_default": false,
+    "require_hydrated_doc_state": true,
     "placeholder_patterns": ["TODO:", "待补充", "在这里", "请补充"]
   },
   "project_docs": [
@@ -138,6 +141,7 @@ type: project-architecture
 status: active
 owner: team
 last_updated: 2026-04-07
+doc_state: hydrated
 template_version: 1.1.0
 template_profile: java-backend-service
 ---
@@ -161,6 +165,7 @@ status: draft
 owner: team
 change_types: ""
 last_updated: 2026-04-07
+doc_state: hydrated
 template_version: 1.1.0
 template_profile: java-backend-service
 ---
@@ -197,6 +202,7 @@ cat > .harness/spec-policy.json <<'EOF'
   },
   "quality_gate": {
     "strict_default": false,
+    "require_hydrated_doc_state": true,
     "placeholder_patterns": []
   },
   "project_docs": [
@@ -252,6 +258,7 @@ type: project-architecture
 status: active
 owner: team
 last_updated: 2026-04-12
+doc_state: hydrated
 template_version: 1.1.0
 template_profile: java-backend-service
 ---
@@ -282,6 +289,7 @@ type: project-design
 status: active
 owner: team
 last_updated: 2026-04-12
+doc_state: hydrated
 template_version: 1.1.0
 template_profile: java-backend-service
 ---
@@ -304,6 +312,7 @@ type: project-api-spec
 status: active
 owner: team
 last_updated: 2026-04-12
+doc_state: hydrated
 template_version: 1.1.0
 template_profile: java-backend-service
 ---
@@ -343,6 +352,7 @@ cat > .harness/spec-policy.json <<'EOF'
   },
   "quality_gate": {
     "strict_default": false,
+    "require_hydrated_doc_state": true,
     "placeholder_patterns": []
   },
   "project_docs": [
@@ -398,6 +408,7 @@ type: project-architecture
 status: active
 owner: team
 last_updated: 2026-04-12
+doc_state: hydrated
 template_version: 1.1.0
 template_profile: java-backend-service
 ---
@@ -428,6 +439,7 @@ type: project-design
 status: active
 owner: team
 last_updated: 2026-04-12
+doc_state: hydrated
 template_version: 1.1.0
 template_profile: java-backend-service
 ---
@@ -450,6 +462,7 @@ type: project-api-spec
 status: active
 owner: team
 last_updated: 2026-04-12
+doc_state: hydrated
 template_version: 1.1.0
 template_profile: java-backend-service
 ---
@@ -485,6 +498,7 @@ cat > .harness/spec-policy.json <<'EOF'
   },
   "quality_gate": {
     "strict_default": false,
+    "require_hydrated_doc_state": true,
     "placeholder_patterns": ["TODO:", "TBD", "FIXME", "PLACEHOLDER", "<TODO>", "{{TODO}}"]
   },
   "project_docs": [
@@ -516,6 +530,7 @@ type: project-architecture
 status: active
 owner: team
 last_updated: 2026-04-07
+doc_state: hydrated
 template_version: 1.1.0
 template_profile: generic
 ---
@@ -539,6 +554,7 @@ status: draft
 owner: team
 change_types: ""
 last_updated: 2026-04-07
+doc_state: hydrated
 template_version: 1.1.0
 template_profile: generic
 ---

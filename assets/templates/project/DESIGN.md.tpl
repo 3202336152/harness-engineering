@@ -5,6 +5,7 @@ type: project-design
 status: active
 owner: {{OWNER}}
 last_updated: {{DATE}}
+doc_state: scaffold
 template_version: {{TEMPLATE_VERSION}}
 template_profile: {{TEMPLATE_PROFILE}}
 template_language: {{TEMPLATE_LANGUAGE}}

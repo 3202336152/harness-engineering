@@ -100,12 +100,15 @@ npx skills add 3202336152/harness-engineering
 ### 初始化后的第二阶段
 
 - `init` 只负责生成规范骨架和策略文件，不会语义理解整个仓库，也不会自动把项目真实信息补进 `docs/project/`
+- 新生成的项目级/功能级文档默认带 `doc_state: scaffold`，表示它们只是骨架，不能直接当作项目真相源
 - 对 Java 项目，更可靠的做法是先运行 `bash scripts/scan-java-project.sh --json`，把 `.harness/runtime/java-doc-scan.json` 作为全量扫描基线
 - 然后让宿主模型基于扫描清单做关键深读，再补全项目级文档
 - 推荐关键深读清单：`pom.xml` / `build.gradle*`、启动类或主入口、`src/main/java` 前两层包结构、主要 `Controller` / `Facade` / `Listener` / `Job`、核心 `ApplicationService` / `DomainService`、`application.yml` / `application-*.yml`
 - 这里不要求把所有源码全文一次性塞进上下文，但必须先完成全量扫描，再覆盖代表性入口、核心链路、关键配置和主要外部集成
+- 补全并核实真实内容后，把对应文档 frontmatter 中的 `doc_state` 从 `scaffold` 改成 `hydrated`
 - 如果仍有未确认信息，直接在文档中写“待确认 / 未覆盖范围”，不要凭空补全；完成后运行 `bash scripts/validate-spec.sh --json --strict`
-- 对 Java profile，`validate-spec --strict` 会根据扫描基线检查项目架构、接口规范、项目设计是否遗漏关键模块、入口、服务和外部依赖
+- 对 Java profile，生成的 `.harness/spec-policy.json` 会默认启用 `strict_default: true`，因此 `validate-spec --json` 就会按 strict 门禁检查 `doc_state` 和 Java 扫描覆盖
+- `init` 的 JSON 输出会包含 `hydration_required_count` 与 `hydration_required_docs`，可直接拿来追踪哪些项目文档还停留在骨架状态
 
 ## 强约束模式
 
@@ -128,6 +131,7 @@ bash scripts/init-harness.sh --with-github-actions
 - `--with-strong-constraints` 会组合启用 `--with-git-hook`、`--with-github-actions`，并让生成的本地 hook 使用 `validate-spec --strict`
 - `--with-git-hook` 会生成 `.git/hooks/pre-commit`
 - `--with-strict-spec-checks` 可与 `--with-git-hook` 或 `--with-husky` 组合使用，让本地 hook 直接运行 `validate-spec --json --strict`
+- 对 Java 画像，只要启用了 `--with-git-hook` 或 `--with-husky`，`init` 会自动把本地 spec 校验提升为 strict，避免骨架文档在提交时漏网
 - `--with-husky` 会生成 `.husky/pre-commit`，并把仓库的 `core.hooksPath` 设置为 `.husky`
 - `--with-github-actions` 会生成 `.github/workflows/harness-guardrails.yml`
 - 开启任一约束选项时，会把 Skill 运行时能力 vendoring 到 `.harness/skill-runtime/harness-engineering`
