@@ -5,13 +5,13 @@ Harness Engineering 工作环境，并为项目级与功能级 spec 提供统一
 
 ## 安装
 
-本地开发和试点时，推荐直接使用仓库自带的精简安装脚本：
+本地开发和试点时，推荐直接使用仓库自带的 runtime-only 安装脚本：
 
 ```bash
 bash scripts/install-skill.sh --global
 ```
 
-它会先导出一个精简 Skill 包，再安装到全局目录，避免把 `tests/`、历史设计文档、归档文档、PDF 一起装进 `~/.agents/skills/`。
+它会先导出一个 runtime-only Skill 包，再安装到全局目录。安装包会保留运行时真正需要的 `SKILL.md`、核心脚本、`scripts/lib/`、`assets/templates/`、`assets/hooks/`、`assets/ci-templates/`、`references/` 和 `LICENSE`，不会把 `doc/`、`README.md`、`CHANGELOG.md`、测试和发布脚本一起装进 `~/.agents/skills/`。
 
 如果你是从远程仓库直接安装：
 
@@ -42,9 +42,11 @@ npx skills add 3202336152/harness-engineering
 - `SKILL.md`：Skill 入口文件
 - `scripts/`：脚本实现
 - `assets/templates/`：初始化模板
+- `assets/hooks/`：本地提交流程模板
+- `assets/ci-templates/`：CI 门禁模板
 - `references/`：深度参考文档
-- `scripts/export-skill-package.sh`：导出精简安装包
-- `scripts/install-skill.sh`：一键导出并安装精简包
+- `scripts/export-skill-package.sh`：导出 runtime-only 安装包
+- `scripts/install-skill.sh`：一键导出并安装 runtime-only 包
 - `tests/`：本地测试
 
 ## Spec 工作流
@@ -74,6 +76,30 @@ npx skills add 3202336152/harness-engineering
 - 运行期证据采集策略可通过 `.harness/observability-policy.json` 配置
 - 运行记录会沉淀到 `.harness/runs/`、`.harness/metrics/`、`.harness/evidence/`、`.harness/runtime/`
 - 旧的上下文 bundle、run record、evidence 目录可通过 `bash scripts/harness-gc.sh --json` 做保留清理
+
+## 强约束模式
+
+- 默认的 `init` 只负责把规范、目录和策略文件搭起来，不会默认改你的 Git hook、Husky 或 CI 配置
+- 如果你希望把“文档影响检查 + spec 校验 + 架构 lint”接成真实门禁，需要在初始化时显式打开约束选项
+
+常见用法：
+
+```bash
+bash scripts/init-harness.sh --with-strong-constraints
+bash scripts/init-harness.sh --with-git-hook
+bash scripts/init-harness.sh --with-husky
+bash scripts/init-harness.sh --with-github-actions
+```
+
+说明：
+
+- `--with-strong-constraints` 会组合启用 `--with-git-hook` 和 `--with-github-actions`
+- `--with-git-hook` 会生成 `.git/hooks/pre-commit`
+- `--with-husky` 会生成 `.husky/pre-commit`，并把仓库的 `core.hooksPath` 设置为 `.husky`
+- `--with-github-actions` 会生成 `.github/workflows/harness-guardrails.yml`
+- 开启任一约束选项时，会把 Skill 运行时能力 vendoring 到 `.harness/skill-runtime/harness-engineering`
+- 这样生成出来的 hook 和 CI 会固定引用仓库内的 vendored runtime，而不是依赖每台机器都提前装好 `~/.agents/skills/harness-engineering`
+- 需要把 `.harness/skill-runtime/harness-engineering` 一起提交到仓库，CI 才能稳定复用同一套校验脚本
 
 ## 当前自治能力边界
 
@@ -131,6 +157,7 @@ npx skills add 3202336152/harness-engineering
   - 安全相关变更要求更新安全文档
   - 构建、配置、部署变更要求更新开发或发布文档
 - 本地钩子示例位于 `assets/hooks/pre-commit-doc-guard.sh.tpl`
+- GitHub Actions 模板位于 `assets/ci-templates/github-actions.yml.tpl`
 
 ## 本地验证
 
@@ -140,6 +167,8 @@ bash scripts/verify-spec-compliance.sh
 bash scripts/export-skill-package.sh --output-dir .build/skill-package
 bash scripts/publish-check.sh --skip-official
 ```
+
+如果你想在 GitHub 上跑带官方安装/校验链路的发布检查，现在可以手动触发 `Publish Check` workflow。
 
 ## 相关说明
 

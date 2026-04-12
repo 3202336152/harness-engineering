@@ -9,6 +9,13 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 describe "package layout"
 
+it "ignores generated runtime-only package artifacts"
+assert_file_contains "$REPO_ROOT/.gitignore" ".build/"
+
+it "does not keep .DS_Store files in the repository"
+ds_store_files=$(find "$REPO_ROOT" -name '.DS_Store' | sort)
+assert_eq "" "$ds_store_files" "repository has no .DS_Store files"
+
 it "includes the deep reference documents for the full skill flow"
 assert_file_exists "$REPO_ROOT/references/ARCHITECTURE-PATTERNS.md"
 assert_file_exists "$REPO_ROOT/references/AGENTS-MD-GUIDE.md"
@@ -24,6 +31,11 @@ it "includes CI template assets for downstream projects"
 assert_file_exists "$REPO_ROOT/assets/ci-templates/github-actions.yml.tpl"
 assert_file_exists "$REPO_ROOT/assets/ci-templates/gitlab-ci.yml.tpl"
 assert_file_exists "$REPO_ROOT/assets/hooks/pre-commit-doc-guard.sh.tpl"
+
+it "includes a manual publish-check workflow for official validation"
+assert_file_exists "$REPO_ROOT/.github/workflows/publish-check.yml"
+assert_file_contains "$REPO_ROOT/.github/workflows/publish-check.yml" "workflow_dispatch:"
+assert_file_contains "$REPO_ROOT/.github/workflows/publish-check.yml" "bash scripts/publish-check.sh"
 
 it "includes spec workflow scripts and templates"
 assert_file_exists "$REPO_ROOT/scripts/new-feature-spec.sh"
@@ -58,21 +70,28 @@ assert_file_exists "$REPO_ROOT/doc/手册/Harness工程手册.md"
 assert_file_exists "$REPO_ROOT/doc/历史设计/00-索引.md"
 assert_file_exists "$REPO_ROOT/doc/归档/Skill实施设计文档.md"
 
-it "exports a slim install bundle for global installation"
+it "exports a runtime-only install bundle for global installation"
 setup_test_dir
 output=$(bash "$REPO_ROOT/scripts/export-skill-package.sh" --output-dir "$TEST_TMP/dist" 2>&1)
 status=$?
 assert_success "$status" "export bundle command succeeds"
 assert_file_exists "$TEST_TMP/dist/harness-engineering/SKILL.md"
 assert_file_exists "$TEST_TMP/dist/harness-engineering/scripts/init-harness.sh"
+assert_file_exists "$TEST_TMP/dist/harness-engineering/scripts/lib/template-resolver.sh"
 assert_file_exists "$TEST_TMP/dist/harness-engineering/assets/templates/project/ARCHITECTURE.md.tpl"
+assert_file_exists "$TEST_TMP/dist/harness-engineering/assets/hooks/pre-commit-doc-guard.sh.tpl"
+assert_file_exists "$TEST_TMP/dist/harness-engineering/assets/ci-templates/github-actions.yml.tpl"
 assert_file_exists "$TEST_TMP/dist/harness-engineering/references/ARCHITECTURE-PATTERNS.md"
+assert_file_not_exists "$TEST_TMP/dist/harness-engineering/README.md"
+assert_file_not_exists "$TEST_TMP/dist/harness-engineering/CHANGELOG.md"
 assert_file_not_exists "$TEST_TMP/dist/harness-engineering/tests/test-init.sh"
+assert_dir_not_exists "$TEST_TMP/dist/harness-engineering/doc"
 assert_file_not_exists "$TEST_TMP/dist/harness-engineering/doc/历史设计/00-索引.md"
 assert_file_not_exists "$TEST_TMP/dist/harness-engineering/doc/归档/Skill实施设计文档.md"
-assert_file_not_exists "$TEST_TMP/dist/harness-engineering/doc/hraness规范说明文档.pdf"
-assert_file_exists "$TEST_TMP/dist/harness-engineering/doc/能力与功能说明.md"
-assert_file_exists "$TEST_TMP/dist/harness-engineering/doc/安装与试点指南.md"
+assert_file_not_exists "$TEST_TMP/dist/harness-engineering/scripts/export-skill-package.sh"
+assert_file_not_exists "$TEST_TMP/dist/harness-engineering/scripts/install-skill.sh"
+assert_file_not_exists "$TEST_TMP/dist/harness-engineering/scripts/publish-check.sh"
+assert_file_not_exists "$TEST_TMP/dist/harness-engineering/scripts/verify-spec-compliance.sh"
 assert_json_field "$output" ".status" "success"
 assert_json_field "$output" ".package_dir" "$TEST_TMP/dist/harness-engineering"
 teardown_test_dir

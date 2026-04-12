@@ -2,7 +2,7 @@
 
 set -eu
 
-HARNESS_SKILL_ROOT="${HARNESS_SKILL_ROOT:-.agents/skills/harness-engineering}"
+HARNESS_SKILL_ROOT="${HARNESS_SKILL_ROOT:-{{HARNESS_SKILL_ROOT}}}"
 
 if [ ! -d "$HARNESS_SKILL_ROOT" ]; then
   echo "[harness] HARNESS_SKILL_ROOT not found: $HARNESS_SKILL_ROOT"

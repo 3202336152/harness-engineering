@@ -5,7 +5,7 @@ on:
   pull_request:
 
 env:
-  HARNESS_SKILL_ROOT: .agents/skills/harness-engineering
+  HARNESS_SKILL_ROOT: "{{HARNESS_SKILL_ROOT}}"
 
 jobs:
   validate:
@@ -41,7 +41,7 @@ jobs:
         run: bash "$HARNESS_SKILL_ROOT/scripts/validate-spec.sh" --json --strict
 
       - name: Check architecture boundaries
-        run: bash scripts/lint-architecture.sh
+        run: bash "$HARNESS_SKILL_ROOT/scripts/lint-architecture.sh"
 
       - name: Check doc freshness
         run: bash "$HARNESS_SKILL_ROOT/scripts/check-doc-freshness.sh" --json

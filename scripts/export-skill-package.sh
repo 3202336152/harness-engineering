@@ -80,6 +80,37 @@ copy_path() {
   COPIED_PATHS+=("$relative_path")
 }
 
+copy_runtime_paths() {
+  local relative_path
+
+  for relative_path in \
+    "SKILL.md" \
+    "LICENSE" \
+    "assets/templates" \
+    "assets/hooks" \
+    "assets/ci-templates" \
+    "references" \
+    "scripts/audit-harness.sh" \
+    "scripts/check-doc-freshness.sh" \
+    "scripts/check-doc-impact.sh" \
+    "scripts/check-rollback-readiness.sh" \
+    "scripts/check-template-drift.sh" \
+    "scripts/collect-runtime-evidence.sh" \
+    "scripts/harness-exec.sh" \
+    "scripts/harness-gc.sh" \
+    "scripts/init-harness.sh" \
+    "scripts/lint-architecture.sh" \
+    "scripts/migrate-template-docs.sh" \
+    "scripts/new-feature-spec.sh" \
+    "scripts/plan-harness.sh" \
+    "scripts/prepare-template-overrides.sh" \
+    "scripts/resolve-task-context.sh" \
+    "scripts/validate-spec.sh" \
+    "scripts/lib"; do
+    copy_path "$relative_path"
+  done
+}
+
 remove_dot_store() {
   find "$PACKAGE_DIR" -name '.DS_Store' -type f -delete 2>/dev/null || true
 }
@@ -95,7 +126,7 @@ emit_json() {
 }
 
 emit_text() {
-  printf 'Exported slim skill package to %s\n' "$PACKAGE_DIR"
+  printf 'Exported runtime-only skill package to %s\n' "$PACKAGE_DIR"
 }
 
 main() {
@@ -107,17 +138,7 @@ main() {
   rm -rf "$PACKAGE_DIR"
   mkdir -p "$PACKAGE_DIR"
 
-  copy_path "SKILL.md"
-  copy_path "README.md"
-  copy_path "LICENSE"
-  copy_path "CHANGELOG.md"
-  copy_path "assets"
-  copy_path "references"
-  copy_path "scripts"
-  copy_path "doc/文档导航.md"
-  copy_path "doc/本地使用指南.md"
-  copy_path "doc/能力与功能说明.md"
-  copy_path "doc/安装与试点指南.md"
+  copy_runtime_paths
 
   remove_dot_store
 

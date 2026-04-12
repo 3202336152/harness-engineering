@@ -7,6 +7,10 @@ DESCRIPTION="TODO: Add project description."
 OWNER="team"
 FORCE=0
 DRY_RUN=0
+WITH_GIT_HOOK=0
+WITH_HUSKY=0
+WITH_GITHUB_ACTIONS=0
+WITH_STRONG_CONSTRAINTS=0
 STACK="unknown"
 IS_GIT=0
 TODAY="$(date +%F)"
@@ -14,6 +18,7 @@ SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEFAULT_TEMPLATES_DIR="$SKILL_DIR/assets/templates"
 USER_TEMPLATE_ROOT="${HARNESS_TEMPLATE_ROOT:-}"
+VENDORED_SKILL_ROOT=".harness/skill-runtime/harness-engineering"
 TEMPLATE_PACK_NAME="${TEMPLATE_PACK_NAME_DEFAULT:-harness-engineering-default}"
 TEMPLATE_VERSION="${TEMPLATE_VERSION_DEFAULT:-1.1.0}"
 TEMPLATE_LANGUAGE="${TEMPLATE_LANGUAGE_DEFAULT:-zh-CN}"
@@ -73,7 +78,7 @@ append_tracked_array_json() {
 
 usage() {
   cat <<'EOF'
-Usage: init-harness.sh [--project-name <name>] [--description <text>] [--template-root <path>] [--profile <name>] [--force] [--dry-run]
+Usage: init-harness.sh [--project-name <name>] [--description <text>] [--template-root <path>] [--profile <name>] [--with-git-hook] [--with-husky] [--with-github-actions] [--with-strong-constraints] [--force] [--dry-run]
 EOF
 }
 
@@ -96,6 +101,22 @@ parse_args() {
         TEMPLATE_PROFILE="${2:-}"
         shift 2
         ;;
+      --with-git-hook)
+        WITH_GIT_HOOK=1
+        shift
+        ;;
+      --with-husky)
+        WITH_HUSKY=1
+        shift
+        ;;
+      --with-github-actions)
+        WITH_GITHUB_ACTIONS=1
+        shift
+        ;;
+      --with-strong-constraints)
+        WITH_STRONG_CONSTRAINTS=1
+        shift
+        ;;
       --force)
         FORCE=1
         shift
@@ -114,6 +135,13 @@ parse_args() {
         ;;
     esac
   done
+}
+
+prepare_guardrail_options() {
+  if [ "$WITH_STRONG_CONSTRAINTS" -eq 1 ]; then
+    WITH_GIT_HOOK=1
+    WITH_GITHUB_ACTIONS=1
+  fi
 }
 
 detect_environment() {
@@ -143,6 +171,10 @@ detect_environment() {
     TEMPLATE_PROFILE="$(default_template_profile_for_stack "$STACK")"
   fi
   PROFILE_DESCRIPTION="$(describe_template_profile "$TEMPLATE_PROFILE")"
+}
+
+guardrails_requested() {
+  [ "$WITH_GIT_HOOK" -eq 1 ] || [ "$WITH_HUSKY" -eq 1 ] || [ "$WITH_GITHUB_ACTIONS" -eq 1 ]
 }
 
 stack_commands() {
@@ -251,25 +283,47 @@ create_directories() {
       fi
     fi
   done
+
+  if guardrails_requested; then
+    for dir in \
+      .harness/skill-runtime; do
+      if [ "$DRY_RUN" -eq 1 ]; then
+        CREATED_DIRS+=("$dir")
+      else
+        if [ ! -d "$dir" ]; then
+          mkdir -p "$dir"
+          CREATED_DIRS+=("$dir")
+        fi
+      fi
+    done
+  fi
+
+  if [ "$WITH_HUSKY" -eq 1 ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+      CREATED_DIRS+=(".husky")
+    else
+      if [ ! -d ".husky" ]; then
+        mkdir -p ".husky"
+        CREATED_DIRS+=(".husky")
+      fi
+    fi
+  fi
+
+  if [ "$WITH_GITHUB_ACTIONS" -eq 1 ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+      CREATED_DIRS+=(".github/workflows")
+    else
+      if [ ! -d ".github/workflows" ]; then
+        mkdir -p ".github/workflows"
+        CREATED_DIRS+=(".github/workflows")
+      fi
+    fi
+  fi
 }
 
-render_template() {
-  local logical_template="$1"
-  local target_file="$2"
+render_content() {
   local content=""
-  local template_file=""
-
-  if [ -f "$target_file" ] && [ "$FORCE" -ne 1 ]; then
-    SKIPPED_FILES+=("$target_file")
-    return 0
-  fi
-
-  if ! template_file="$(resolve_template_file "$logical_template")"; then
-    printf 'Warning: Missing template %s\n' "$logical_template" >&2
-    return 0
-  fi
-
-  content="$(cat "$template_file")"
+  content="$1"
   content="${content//'{{PROJECT_NAME}}'/$PROJECT_NAME}"
   content="${content//'{{DESCRIPTION}}'/$DESCRIPTION}"
   content="${content//'{{OWNER}}'/$OWNER}"
@@ -281,11 +335,182 @@ render_template() {
   content="${content//'{{TEMPLATE_PROFILE}}'/$TEMPLATE_PROFILE}"
   content="${content//'{{TEMPLATE_LANGUAGE}}'/$TEMPLATE_LANGUAGE}"
   content="${content//'{{PROFILE_DESCRIPTION}}'/$PROFILE_DESCRIPTION}"
+  content="${content//'{{HARNESS_SKILL_ROOT}}'/$VENDORED_SKILL_ROOT}"
+
+  printf '%s' "$content"
+}
+
+write_rendered_file() {
+  local target_file="$1"
+  local content="$2"
+
+  if [ -f "$target_file" ] && [ "$FORCE" -ne 1 ]; then
+    SKIPPED_FILES+=("$target_file")
+    return 0
+  fi
 
   if [ "$DRY_RUN" -eq 0 ]; then
+    mkdir -p "$(dirname "$target_file")"
     printf '%s\n' "$content" > "$target_file"
   fi
   CREATED_FILES+=("$target_file")
+}
+
+render_template() {
+  local logical_template="$1"
+  local target_file="$2"
+  local content=""
+  local template_file=""
+
+  if ! template_file="$(resolve_template_file "$logical_template")"; then
+    printf 'Warning: Missing template %s\n' "$logical_template" >&2
+    return 0
+  fi
+
+  content="$(render_content "$(cat "$template_file")")"
+  write_rendered_file "$target_file" "$content"
+}
+
+render_support_template() {
+  local source_file="$1"
+  local target_file="$2"
+  local content=""
+
+  if [ ! -f "$source_file" ]; then
+    printf 'Warning: Missing support template %s\n' "$source_file" >&2
+    return 0
+  fi
+
+  content="$(render_content "$(cat "$source_file")")"
+  write_rendered_file "$target_file" "$content"
+}
+
+runtime_bundle_copy_paths() {
+  cat <<'EOF'
+SKILL.md
+LICENSE
+assets/templates
+assets/hooks
+assets/ci-templates
+scripts/audit-harness.sh
+scripts/check-doc-freshness.sh
+scripts/check-doc-impact.sh
+scripts/check-rollback-readiness.sh
+scripts/check-template-drift.sh
+scripts/collect-runtime-evidence.sh
+scripts/harness-exec.sh
+scripts/harness-gc.sh
+scripts/init-harness.sh
+scripts/lint-architecture.sh
+scripts/migrate-template-docs.sh
+scripts/new-feature-spec.sh
+scripts/plan-harness.sh
+scripts/prepare-template-overrides.sh
+scripts/resolve-task-context.sh
+scripts/validate-spec.sh
+scripts/lib
+EOF
+}
+
+copy_runtime_entry() {
+  local relative_path="$1"
+  local source_path="$SKILL_DIR/$relative_path"
+  local target_path="$VENDORED_SKILL_ROOT/$relative_path"
+  local file_path=""
+
+  [ -e "$source_path" ] || return 0
+
+  if [ "$DRY_RUN" -eq 1 ]; then
+    if [ -d "$source_path" ]; then
+      while IFS= read -r file_path; do
+        [ -n "$file_path" ] || continue
+        CREATED_FILES+=("$VENDORED_SKILL_ROOT/${file_path#"$source_path"/}")
+      done <<EOF
+$(find "$source_path" -type f | sort)
+EOF
+    else
+      CREATED_FILES+=("$target_path")
+    fi
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$target_path")"
+  cp -R "$source_path" "$target_path"
+
+  if [ -d "$target_path" ]; then
+    while IFS= read -r file_path; do
+      [ -n "$file_path" ] || continue
+      CREATED_FILES+=("$VENDORED_SKILL_ROOT/${file_path#./}")
+    done <<EOF
+$(cd "$VENDORED_SKILL_ROOT" && find "$relative_path" -type f | sort)
+EOF
+  else
+    CREATED_FILES+=("$target_path")
+  fi
+}
+
+vendor_runtime_bundle() {
+  local relative_path=""
+
+  if ! guardrails_requested; then
+    return 0
+  fi
+
+  if [ -e "$VENDORED_SKILL_ROOT" ] && [ "$FORCE" -ne 1 ]; then
+    SKIPPED_FILES+=("$VENDORED_SKILL_ROOT")
+    return 0
+  fi
+
+  if [ "$DRY_RUN" -eq 0 ]; then
+    rm -rf "$VENDORED_SKILL_ROOT"
+    mkdir -p "$VENDORED_SKILL_ROOT"
+    CREATED_DIRS+=("$VENDORED_SKILL_ROOT")
+  else
+    CREATED_DIRS+=("$VENDORED_SKILL_ROOT")
+  fi
+
+  while IFS= read -r relative_path; do
+    [ -n "$relative_path" ] || continue
+    copy_runtime_entry "$relative_path"
+  done <<EOF
+$(runtime_bundle_copy_paths)
+EOF
+
+  if [ "$DRY_RUN" -eq 0 ]; then
+    find "$VENDORED_SKILL_ROOT" -name '.DS_Store' -type f -delete 2>/dev/null || true
+  fi
+}
+
+make_executable_if_present() {
+  local target_file="$1"
+  if [ "$DRY_RUN" -eq 0 ] && [ -f "$target_file" ]; then
+    chmod +x "$target_file"
+  fi
+}
+
+generate_guardrails() {
+  vendor_runtime_bundle
+
+  if [ "$WITH_GIT_HOOK" -eq 1 ]; then
+    if [ "$IS_GIT" -eq 1 ]; then
+      render_support_template "$SKILL_DIR/assets/hooks/pre-commit-doc-guard.sh.tpl" ".git/hooks/pre-commit"
+      make_executable_if_present ".git/hooks/pre-commit"
+    else
+      printf 'Warning: --with-git-hook requested outside a git repository; skipping git hook generation.\n' >&2
+    fi
+  fi
+
+  if [ "$WITH_HUSKY" -eq 1 ]; then
+    render_support_template "$SKILL_DIR/assets/hooks/pre-commit-doc-guard.sh.tpl" ".husky/pre-commit"
+    make_executable_if_present ".husky/pre-commit"
+    if [ "$DRY_RUN" -eq 0 ] && [ "$IS_GIT" -eq 1 ]; then
+      git config core.hooksPath .husky
+    fi
+  fi
+
+  if [ "$WITH_GITHUB_ACTIONS" -eq 1 ]; then
+    render_support_template "$SKILL_DIR/assets/ci-templates/github-actions.yml.tpl" ".github/workflows/harness-guardrails.yml"
+  fi
 }
 
 generate_files() {
@@ -314,9 +539,22 @@ generate_files() {
   render_template "observability-policy.json.tpl" ".harness/observability-policy.json"
   render_template "task-memory.json.tpl" ".harness/runtime/task-memory.json"
   render_template "progress.md.tpl" ".harness/runtime/progress.md"
+  generate_guardrails
 }
 
 output_report() {
+  local enabled_guardrails=()
+
+  if [ "$WITH_GIT_HOOK" -eq 1 ]; then
+    enabled_guardrails+=("git-hook")
+  fi
+  if [ "$WITH_HUSKY" -eq 1 ]; then
+    enabled_guardrails+=("husky")
+  fi
+  if [ "$WITH_GITHUB_ACTIONS" -eq 1 ]; then
+    enabled_guardrails+=("github-actions")
+  fi
+
   printf '{'
   printf '"status":"success",'
   printf '"project":"%s",' "$(json_escape "$PROJECT_NAME")"
@@ -328,6 +566,9 @@ output_report() {
   printf ','
   printf '"skipped_files":'
   append_tracked_array_json "SKIPPED_FILES"
+  printf ','
+  printf '"enabled_guardrails":'
+  append_array_json "${enabled_guardrails[@]-}"
   printf ','
   printf '"detected_stack":"%s",' "$(json_escape "$STACK")"
   printf '"next_steps":'
@@ -348,6 +589,7 @@ output_report() {
 
 main() {
   parse_args "$@"
+  prepare_guardrail_options
   init_template_resolver "$DEFAULT_TEMPLATES_DIR" "$USER_TEMPLATE_ROOT" ".harness/templates"
   detect_environment
   create_directories

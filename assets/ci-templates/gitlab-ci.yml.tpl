@@ -2,7 +2,7 @@ stages:
   - validate
 
 variables:
-  HARNESS_SKILL_ROOT: ".agents/skills/harness-engineering"
+  HARNESS_SKILL_ROOT: "{{HARNESS_SKILL_ROOT}}"
 
 validate:harness:
   stage: validate
@@ -18,5 +18,5 @@ validate:harness:
         bash "$HARNESS_SKILL_ROOT/scripts/check-doc-impact.sh" --json
       fi
     - bash "$HARNESS_SKILL_ROOT/scripts/validate-spec.sh" --json --strict
-    - bash scripts/lint-architecture.sh
+    - bash "$HARNESS_SKILL_ROOT/scripts/lint-architecture.sh"
     - bash "$HARNESS_SKILL_ROOT/scripts/check-doc-freshness.sh" --json

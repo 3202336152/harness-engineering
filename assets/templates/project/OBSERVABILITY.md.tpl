@@ -16,11 +16,18 @@ template_language: {{TEMPLATE_LANGUAGE}}
 
 - 至少统一 `traceId`、`requestId`、`operatorId`、`tenantId`、`featureId` 的输出口径。
 - 明确敏感字段脱敏规则和审计日志落点。
+- 明确复杂链路的核心业务键，例如 `orderId`、`taskId`、`messageKey`、`bizId` 等。
 
 ## 核心指标
 
 - 成功率、耗时、错误码、任务失败数、消息堆积、数据库异常数。
 - 说明哪些指标用于放量判断，哪些指标用于回滚触发。
+
+## Trace、事件与排障链路
+
+- 哪些入口默认要打 trace/span，哪些任务、消息消费必须串上同一业务键
+- 哪些事件记录、重试记录、死信记录、补偿记录是排障第一入口
+- 是否需要记录 `afterCommit` 发送结果、回调结果、定时任务扫描范围
 
 ## 仪表盘与检索入口
 

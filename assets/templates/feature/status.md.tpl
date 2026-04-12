@@ -32,6 +32,13 @@ template_language: {{TEMPLATE_LANGUAGE}}
 - Implementing
 - Complete
 
+## 本轮实现与剩余项
+
+建议拆成两部分：
+
+- 本轮已经完成的功能、接口、SQL、测试、文档
+- 当前仍未完成或后续阶段再补的内容
+
 ## 当前阶段检查项
 
 - [ ] 需求已确认

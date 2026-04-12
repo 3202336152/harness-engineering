@@ -32,13 +32,13 @@ describe_template_profile() {
   local profile="${1:-generic}"
   case "$profile" in
     java-backend-service)
-      printf '面向典型 Java 后端服务，重点关注接口契约、事务边界、缓存与消息一致性、外部集成和灰度发布。'
+      printf '面向典型 Java 后端服务，重点关注模块职责、主链时序、接口契约、事务边界、缓存与消息一致性、外部集成、测试回归和灰度发布。'
       ;;
     java-batch-job)
-      printf '面向批处理或定时任务型 Java 项目，重点关注批量窗口、任务幂等、补偿回查、数据迁移与对账。'
+      printf '面向批处理或定时任务型 Java 项目，重点关注批量窗口、任务幂等、补偿回查、数据迁移、对账验证和失败重跑。'
       ;;
     java-adapter)
-      printf '面向集成适配型 Java 项目，重点关注协议转换、防腐层、重试降级、审计追踪与上下游兼容。'
+      printf '面向集成适配型 Java 项目，重点关注协议转换、防腐层、重试降级、审计追踪、联调样例与上下游兼容。'
       ;;
     node-service)
       printf '面向 Node 服务项目，重点关注接口、异步任务、依赖治理和运行时可观测性。'
