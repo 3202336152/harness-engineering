@@ -65,9 +65,10 @@ Execution flow:
 1. Detect whether the current directory is a git repository.
 2. Detect the stack from `package.json`, `pyproject.toml`, `go.mod`, or
    `Cargo.toml`.
-3. Create the standard `docs/project/`, `docs/features/`,
-   `docs/exec-plans/{active,completed,tech-debt}/`, `docs/product-specs/`,
-   `docs/references/`, and `.github/` directories.
+3. Create the standard `docs/project/`, `docs/features/`, `docs/decisions/`,
+   `.harness/exec-plans/{active,completed,tech-debt}/`,
+   `.harness/product-specs/`, `.harness/references/`, and `.github/`
+   directories.
 4. Render the canonical entry template into the requested tool-specific filenames, plus the project-level spec templates from `assets/templates/`.
 5. Create `.harness/architecture.json`, `.harness/spec-policy.json`, `.harness/doc-impact-rules.json`, `.harness/context-policy.json`, `.harness/run-policy.json`, and `.harness/observability-policy.json`.
 6. Create `.harness/runtime/task-memory.json`, `.harness/runtime/last-audit.json`, `.harness/runtime/progress.md`, `.harness/evidence/`, and `.harness/metrics/`.
@@ -187,7 +188,7 @@ Active
 - [ ] Integration or UI work
 ```
 
-Store plans in `docs/exec-plans/active/`.
+Store plans in `.harness/exec-plans/active/`.
 
 Command:
 

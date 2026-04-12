@@ -20,7 +20,7 @@ AGENT="${HARNESS_AGENT_NAME:-unknown-agent}"
 STRICT=0
 USE_STAGED=0
 OUTPUT_JSON=0
-PLAN_DIR="docs/exec-plans/active"
+PLAN_DIR="$(exec_plan_dir_path active)"
 
 RUN_POLICY_PATH=".harness/run-policy.json"
 OBSERVABILITY_POLICY_PATH=".harness/observability-policy.json"

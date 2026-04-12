@@ -8,7 +8,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$REPO_ROOT/tests/test-helpers.sh"
 
 seed_full_harness_project() {
-  mkdir -p docs/design-docs docs/exec-plans/active docs/exec-plans/completed .github/workflows scripts tests
+  mkdir -p docs/design-docs .harness/exec-plans/active .harness/exec-plans/completed .github/workflows scripts tests
   cat > AGENTS.md <<'EOF'
 # Sample Project
 
@@ -63,7 +63,7 @@ EOF
 
 Architecture choices require team review.
 EOF
-  cat > docs/exec-plans/active/sample-plan.md <<'EOF'
+  cat > .harness/exec-plans/active/sample-plan.md <<'EOF'
 # Execution Plan
 
 Active plan placeholder.

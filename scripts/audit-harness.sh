@@ -43,7 +43,7 @@ AUTOMATION_FIX="Add CI, pre-commit hooks, and a pull request template."
 EXEC_SCORE=0
 EXEC_STATUS=""
 EXEC_DETAILS=""
-EXEC_FIX="Create docs/exec-plans/active and track real execution plans there."
+EXEC_FIX="Create .harness/exec-plans/active and track real execution plans there."
 
 SECURITY_SCORE=0
 SECURITY_STATUS=""
@@ -175,7 +175,7 @@ score_entry_document() {
   if [ "$ENTRY_SCORE" -ge 100 ]; then
     ENTRY_FIX="Entry document already looks healthy."
   elif [ "$line_count" -gt 200 ]; then
-    ENTRY_FIX="Entry document is $line_count lines. Move detailed implementation notes into docs/project/ or docs/references/ and keep the entry document as a short index under 100 lines."
+    ENTRY_FIX="Entry document is $line_count lines. Move detailed implementation notes into docs/project/ or .harness/references/ and keep the entry document as a short index under 100 lines."
   elif [ "$line_count" -gt 100 ]; then
     ENTRY_FIX="Entry document is $line_count lines. Trim inline detail and replace it with short pointers to docs/project/ and docs/features/."
   else
@@ -384,23 +384,23 @@ score_automation() {
 }
 
 score_exec_plans() {
-  if [ -d docs/exec-plans ]; then
+  if [ -d "$(exec_plan_root_path)" ]; then
     EXEC_SCORE=$((EXEC_SCORE + 40))
-    EXEC_DETAILS="$(append_detail "$EXEC_DETAILS" "docs/exec-plans exists")"
-    if [ -d docs/exec-plans/active ]; then
+    EXEC_DETAILS="$(append_detail "$EXEC_DETAILS" "$(exec_plan_root_path) exists")"
+    if [ -d "$(exec_plan_dir_path active)" ]; then
       EXEC_SCORE=$((EXEC_SCORE + 20))
       EXEC_DETAILS="$(append_detail "$EXEC_DETAILS" "active plans directory exists")"
     fi
-    if [ -d docs/exec-plans/completed ]; then
+    if [ -d "$(exec_plan_dir_path completed)" ]; then
       EXEC_SCORE=$((EXEC_SCORE + 20))
       EXEC_DETAILS="$(append_detail "$EXEC_DETAILS" "completed plans directory exists")"
     fi
-    if find docs/exec-plans -type f -name '*.md' 2>/dev/null | grep -q .; then
+    if find "$(exec_plan_root_path)" -type f -name '*.md' 2>/dev/null | grep -q .; then
       EXEC_SCORE=$((EXEC_SCORE + 20))
       EXEC_DETAILS="$(append_detail "$EXEC_DETAILS" "Execution plan files found")"
     fi
   else
-    EXEC_DETAILS="docs/exec-plans is missing"
+    EXEC_DETAILS="$(exec_plan_root_path) is missing"
   fi
 
   EXEC_STATUS="Execution plan score: $EXEC_SCORE"

@@ -34,8 +34,8 @@ status=$?
 assert_success "$status" "prepare stage succeeds"
 assert_file_exists "docs/features/FEAT-011-order-query/功能概览.md"
 assert_file_exists "docs/features/FEAT-011-order-query/manifest.json"
-assert_file_exists "docs/exec-plans/active/order-query.md"
-assert_file_exists "docs/exec-plans/active/order-query.json"
+assert_file_exists ".harness/exec-plans/active/order-query.md"
+assert_file_exists ".harness/exec-plans/active/order-query.json"
 assert_file_exists ".harness/runtime/context/order-query.json"
 assert_json_field "$output" ".status" "success"
 assert_json_field "$output" ".feature_created" "true"
@@ -50,7 +50,7 @@ output=$(HARNESS_AGENT_NAME="claude-code" bash "$REPO_ROOT/scripts/harness-exec.
 status=$?
 assert_success "$status" "prepare stage succeeds with env-based agent default"
 assert_json_field "$output" ".status" "success"
-assert_json_field "$(cat docs/exec-plans/active/inventory-sync.json)" ".agent" "claude-code"
+assert_json_field "$(cat .harness/exec-plans/active/inventory-sync.json)" ".agent" "claude-code"
 teardown_test_dir
 
 it "verify stage aggregates harness checks"

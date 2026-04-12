@@ -12,7 +12,7 @@ AGENT="unknown-agent"
 FEATURE_ID=""
 CHANGE_TYPES=""
 DRY_RUN=0
-OUTPUT_DIR="docs/exec-plans/active"
+OUTPUT_DIR="$(exec_plan_dir_path active)"
 
 json_escape() {
   local text="$1"

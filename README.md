@@ -69,6 +69,7 @@ npx skills add 3202336152/harness-engineering
 
 - 项目级 spec 统一放在 `docs/project/`
 - 功能级 spec 统一放在 `docs/features/<feature-id>-<title-slug>/`
+- 执行计划、产品需求沉淀、外部参考资料等运行期支撑内容统一放在 `.harness/` 下，避免和共享真相文档混在一起
 - `doc/` 下的维护文档统一使用中文文件名
 - 项目级与功能级 spec 模板默认生成中文内容和中文 `md` 文件名，便于团队查看、评审和检索
 - 默认生成的文件示例：
@@ -80,6 +81,7 @@ npx skills add 3202336152/harness-engineering
   - `docs/features/FEAT-001-order-query/接口设计.md`
 - 生成的项目级/功能级 spec 会带 `template_version`、`template_profile`、`template_language` 元数据
 - `init` 还会生成 `docs/project/运行基线.md`、`docs/project/可观测性基线.md`、`.harness/context-policy.json`、`.harness/run-policy.json`
+- `init` 会创建 `.harness/exec-plans/`、`.harness/product-specs/`、`.harness/references/`，用于承接执行计划和辅助上下文资料
 - 项目规则通过 `.harness/spec-policy.json` 描述
 - 功能文档通过 `bash scripts/new-feature-spec.sh ...` 生成，并附带 `manifest.json`
 - 执行计划通过 `bash scripts/plan-harness.sh ...` 同时生成 `md + json`

@@ -552,13 +552,13 @@ create_directories() {
     docs/project \
     docs/features \
     docs/decisions \
-    docs/exec-plans/active \
-    docs/exec-plans/completed \
-    docs/exec-plans/tech-debt \
-    docs/product-specs \
-    docs/references \
     .github \
     .harness \
+    "$(exec_plan_dir_path active)" \
+    "$(exec_plan_dir_path completed)" \
+    "$(exec_plan_dir_path tech-debt)" \
+    "$(product_specs_dir_path)" \
+    "$(project_references_dir_path)" \
     .harness/runtime \
     .harness/runtime/context \
     .harness/runs \

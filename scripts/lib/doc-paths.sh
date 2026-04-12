@@ -62,6 +62,22 @@ project_doc_path() {
   printf 'docs/project/%s' "$(project_doc_filename "$1")"
 }
 
+exec_plan_root_path() {
+  printf '.harness/exec-plans'
+}
+
+exec_plan_dir_path() {
+  printf '%s/%s' "$(exec_plan_root_path)" "$1"
+}
+
+product_specs_dir_path() {
+  printf '.harness/product-specs'
+}
+
+project_references_dir_path() {
+  printf '.harness/references'
+}
+
 project_index_doc_path() {
   printf 'docs/%s' "$(project_doc_filename "$1")"
 }

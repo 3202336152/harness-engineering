@@ -128,8 +128,8 @@ Java profile: Interfaces -> Application -> Domain; Infrastructure -> Domain
 | 安全 | docs/project/安全规范.md | 认证、权限、敏感数据 |
 | 测试 | docs/project/测试策略.md | 测试策略和命令 |
 | 设计决策 | docs/project/核心信念.md / docs/decisions/ | 核心设计信念与补充决策 |
-| 执行计划 | docs/exec-plans/ | 当前和已完成的计划 |
-| 产品需求 | docs/product-specs/ | 功能需求和用户流程 |
+| 执行计划 | .harness/exec-plans/ | 当前和已完成的计划 |
+| 产品需求 | .harness/product-specs/ | 功能需求和用户流程 |
 
 ## Git 工作流
 
@@ -295,9 +295,9 @@ AGENTS.md 中的每一个 token 都在与任务本身争夺注意力。遵循以
 所有影响 Agent 行为的知识必须从以下位置迁移到仓库:
 
 - [ ] Slack/飞书消息中的架构决策 -> `docs/project/核心信念.md` / `docs/decisions/`
-- [ ] Google Docs/Notion 中的产品需求 -> `docs/product-specs/`
+- [ ] Google Docs/Notion 中的产品需求 -> `.harness/product-specs/`
 - [ ] 团队成员脑中的隐性知识 -> `docs/project/开发规范.md`
-- [ ] 外部库文档 -> `docs/references/`（重格式化为 LLM 友好格式）
+- [ ] 外部库文档 -> `.harness/references/`（重格式化为 LLM 友好格式）
 - [ ] 会议纪要中的决策 -> `docs/project/核心信念.md` / `docs/decisions/`
 - [ ] CI/CD 配置的理由 -> `docs/project/项目架构.md`
 
@@ -535,7 +535,7 @@ echo "All documentation is fresh."
 复杂任务在执行前必须先生成计划，并签入仓库:
 
 ```markdown
-<!-- docs/exec-plans/active/add-search-feature.md -->
+<!-- .harness/exec-plans/active/add-search-feature.md -->
 
 # 执行计划: 用户搜索功能
 
@@ -685,7 +685,7 @@ permissions:
   write:
     - src/**
     - tests/**
-    - docs/exec-plans/**
+    - .harness/exec-plans/**
 
   execute:
     - npm test
