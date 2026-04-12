@@ -291,6 +291,31 @@ assert_json_field "$output" ".maturity_level" "0"
 assert_json_field "$output" ".maturity_label" "No Harness"
 teardown_test_dir
 
+it "treats GEMINI.md as a valid entry document"
+setup_test_dir
+init_git_repo
+cat > GEMINI.md <<'EOF'
+# Sample Project
+
+## Quick Commands
+
+- npm test
+
+## Architecture
+
+Layered service architecture.
+
+## Constraints
+
+Keep docs updated.
+EOF
+output=$(bash "$REPO_ROOT/scripts/audit-harness.sh" 2>&1)
+status=$?
+assert_success "$status" "audit command succeeds with GEMINI entry doc"
+assert_json_field "$output" ".dimensions.entry_document.score" "100"
+assert_json_field "$output" ".dimensions.entry_document.line_count" "13"
+teardown_test_dir
+
 it "reports a high score for a well-prepared harness project"
 setup_test_dir
 init_git_repo

@@ -17,6 +17,8 @@ status=$?
 assert_success "$status" "init command succeeds"
 assert_file_exists "AGENTS.md"
 assert_file_exists "CLAUDE.md"
+assert_file_not_exists "GEMINI.md"
+assert_files_equal "CLAUDE.md" "AGENTS.md" "entry docs stay identical across tool-specific filenames"
 assert_dir_exists "docs/project"
 assert_dir_exists "docs/features"
 assert_file_exists "docs/project/核心信念.md"
@@ -104,12 +106,18 @@ assert_json_field "$(cat .harness/spec-policy.json)" ".template_pack.profile" "g
 assert_json_field "$(cat .harness/spec-policy.json)" '.project_docs | map(select(.id == "core-beliefs")) | length' "1"
 assert_json_field "$(cat .harness/doc-impact-rules.json)" ".rules[0].id" "java-api-surface"
 assert_json_field "$(cat .harness/context-policy.json)" ".version" "1.0.0"
+assert_json_field "$(cat .harness/context-policy.json)" '.always_include | index("AGENTS.md") != null' "true"
+assert_json_field "$(cat .harness/context-policy.json)" '.always_include | index("CLAUDE.md") != null' "true"
+assert_json_field "$(cat .harness/context-policy.json)" '.always_include | index("GEMINI.md") != null' "true"
 assert_json_field "$(cat .harness/context-policy.json)" '.always_include | index("docs/project/核心信念.md") != null' "true"
 assert_json_field "$(cat .harness/architecture.json)" '.layers[0]' "types"
 assert_json_field "$(cat .harness/run-policy.json)" ".verify_steps[0]" "doc_impact"
 assert_json_field "$(cat .harness/observability-policy.json)" ".version" "1.0.0"
 assert_json_field "$(cat .harness/runtime/task-memory.json)" ".version" "1.0.0"
 assert_json_field "$(cat .harness/runtime/last-audit.json)" ".status" "never_run"
+assert_json_field "$output" '.entry_files | index("AGENTS.md") != null' "true"
+assert_json_field "$output" '.entry_files | index("CLAUDE.md") != null' "true"
+assert_json_field "$output" '.entry_files | index("GEMINI.md") == null' "true"
 assert_json_field "$output" '.next_steps | index("After init, have the coding agent read key project files before filling docs/project/; do not rely on guesses") != null' "true"
 assert_json_field "$output" ".status" "success"
 assert_json_field "$output" ".project" "sample-app"
@@ -195,7 +203,7 @@ it "uses user-level template overrides when HARNESS_TEMPLATE_ROOT is set"
 setup_test_dir
 init_git_repo
 mkdir -p custom-templates/project
-cat > custom-templates/AGENTS.md.tpl <<'EOF'
+cat > custom-templates/CLAUDE.md.tpl <<'EOF'
 # {{PROJECT_NAME}}
 
 这是用户级自定义入口模板。
@@ -204,6 +212,40 @@ output=$(HARNESS_TEMPLATE_ROOT="$PWD/custom-templates" bash "$REPO_ROOT/scripts/
 status=$?
 assert_success "$status" "init command succeeds with user template root"
 assert_file_contains "AGENTS.md" "这是用户级自定义入口模板。"
+assert_file_contains "CLAUDE.md" "这是用户级自定义入口模板。"
+assert_files_equal "CLAUDE.md" "AGENTS.md" "custom entry template is shared by AGENTS and CLAUDE"
+teardown_test_dir
+
+it "supports tool-scoped entry docs and additive re-init without losing existing content"
+setup_test_dir
+init_git_repo
+output=$(bash "$REPO_ROOT/scripts/init-harness.sh" --tool codex 2>&1)
+status=$?
+assert_success "$status" "init command succeeds with codex-only entry doc"
+assert_file_exists "AGENTS.md"
+assert_file_not_exists "CLAUDE.md"
+assert_file_not_exists "GEMINI.md"
+assert_json_field "$output" '.entry_files | length' "1"
+assert_json_field "$output" '.entry_files[0]' "AGENTS.md"
+cat >> AGENTS.md <<'EOF'
+
+## Custom Constraint
+
+- Keep cross-tool entry docs aligned.
+EOF
+output=$(bash "$REPO_ROOT/scripts/init-harness.sh" --tool claude-code,gemini-cli 2>&1)
+status=$?
+assert_success "$status" "re-init adds missing tool entry docs"
+assert_file_exists "CLAUDE.md"
+assert_file_exists "GEMINI.md"
+assert_file_contains "AGENTS.md" "Custom Constraint"
+assert_file_contains "CLAUDE.md" "Custom Constraint"
+assert_file_contains "GEMINI.md" "Custom Constraint"
+assert_files_equal "AGENTS.md" "CLAUDE.md" "claude entry doc reuses the existing codex content"
+assert_files_equal "AGENTS.md" "GEMINI.md" "gemini entry doc reuses the existing codex content"
+assert_json_field "$output" '.created_files | index("CLAUDE.md") != null' "true"
+assert_json_field "$output" '.created_files | index("GEMINI.md") != null' "true"
+assert_json_field "$output" '.skipped_files | index("docs/project/核心信念.md") != null' "true"
 teardown_test_dir
 
 it "does not overwrite AGENTS.md unless force is provided"
@@ -216,6 +258,8 @@ output=$(bash "$REPO_ROOT/scripts/init-harness.sh" 2>&1)
 status=$?
 assert_success "$status" "init command succeeds without force"
 assert_file_contains "AGENTS.md" "Custom Agent Notes"
+assert_file_exists "CLAUDE.md"
+assert_files_equal "AGENTS.md" "CLAUDE.md" "missing entry docs inherit the existing custom content"
 assert_json_number_gte "$output" ".skipped_files | length" "1"
 teardown_test_dir
 

@@ -119,6 +119,19 @@ assert_file_contains() {
   fi
 }
 
+assert_files_equal() {
+  local expected_file="$1"
+  local actual_file="$2"
+  local message="${3:-files are equal}"
+  if cmp -s "$expected_file" "$actual_file" 2>/dev/null; then
+    pass_test "$message"
+  else
+    fail_test "$message"
+    echo "    expected file: $expected_file"
+    echo "    actual file:   $actual_file"
+  fi
+}
+
 assert_json_field() {
   local json="$1"
   local field="$2"

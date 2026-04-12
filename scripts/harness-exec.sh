@@ -8,6 +8,8 @@ shift || true
 
 # shellcheck source=scripts/lib/doc-paths.sh
 . "$SCRIPT_DIR/lib/doc-paths.sh"
+# shellcheck source=scripts/lib/entry-docs.sh
+. "$SCRIPT_DIR/lib/entry-docs.sh"
 
 TASK=""
 FEATURE_ID=""
@@ -463,10 +465,9 @@ fallback_restore_context_bundle_json() {
   local path=""
   local doc_id=""
 
-  if [ -f AGENTS.md ]; then
-    lines="AGENTS.md"
-  elif [ -f CLAUDE.md ]; then
-    lines="CLAUDE.md"
+  path="$(first_existing_entry_document_path || true)"
+  if [ -n "$path" ]; then
+    lines="$path"
   fi
 
   for doc_id in core-beliefs architecture development testing security requirements operations observability; do

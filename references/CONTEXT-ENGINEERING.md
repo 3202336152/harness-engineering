@@ -12,7 +12,7 @@ needed.
 
 ### Tier 1: Automatic
 
-- `AGENTS.md`
+- `AGENTS.md` / `CLAUDE.md` / `GEMINI.md`
 - the current task
 - the files already being edited
 

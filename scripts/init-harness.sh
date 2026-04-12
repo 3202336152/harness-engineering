@@ -25,6 +25,9 @@ TEMPLATE_VERSION="${TEMPLATE_VERSION_DEFAULT:-1.1.0}"
 TEMPLATE_LANGUAGE="${TEMPLATE_LANGUAGE_DEFAULT:-zh-CN}"
 TEMPLATE_PROFILE=""
 PROFILE_DESCRIPTION=""
+ENTRY_TOOLS=()
+CUSTOM_ENTRY_FILES=()
+RESOLVED_ENTRY_FILES=()
 
 # shellcheck source=scripts/lib/template-resolver.sh
 . "$SCRIPT_DIR/lib/template-resolver.sh"
@@ -32,6 +35,8 @@ PROFILE_DESCRIPTION=""
 . "$SCRIPT_DIR/lib/template-profile.sh"
 # shellcheck source=scripts/lib/doc-paths.sh
 . "$SCRIPT_DIR/lib/doc-paths.sh"
+# shellcheck source=scripts/lib/entry-docs.sh
+. "$SCRIPT_DIR/lib/entry-docs.sh"
 
 CREATED_FILES=()
 CREATED_DIRS=()
@@ -166,8 +171,51 @@ append_tracked_array_json() {
 
 usage() {
   cat <<'EOF'
-Usage: init-harness.sh [--project-name <name>] [--description <text>] [--template-root <path>] [--profile <name>] [--with-git-hook] [--with-husky] [--with-github-actions] [--with-strong-constraints] [--with-strict-spec-checks] [--force] [--dry-run]
+Usage: init-harness.sh [--project-name <name>] [--description <text>] [--template-root <path>] [--profile <name>] [--tool <name>] [--entry-file <path>] [--with-git-hook] [--with-husky] [--with-github-actions] [--with-strong-constraints] [--with-strict-spec-checks] [--force] [--dry-run]
 EOF
+}
+
+trim_whitespace() {
+  local value="$1"
+
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
+}
+
+append_unique_value() {
+  local value="$1"
+  shift || true
+
+  if [ -z "$value" ]; then
+    return 0
+  fi
+
+  if [ "$#" -eq 0 ]; then
+    return 0
+  fi
+
+  local item
+  for item in "$@"; do
+    if [ "$item" = "$value" ]; then
+      return 1
+    fi
+  done
+  return 0
+}
+
+append_csv_values_to_array() {
+  local array_name="$1"
+  local raw_values="$2"
+  local values=()
+  local value=""
+
+  IFS=',' read -r -a values <<< "$raw_values"
+  for value in "${values[@]}"; do
+    value="$(trim_whitespace "$value")"
+    [ -n "$value" ] || continue
+    eval "$array_name+=(\"\$value\")"
+  done
 }
 
 parse_args() {
@@ -187,6 +235,14 @@ parse_args() {
         ;;
       --profile)
         TEMPLATE_PROFILE="${2:-}"
+        shift 2
+        ;;
+      --tool)
+        append_csv_values_to_array "ENTRY_TOOLS" "${2:-}"
+        shift 2
+        ;;
+      --entry-file)
+        CUSTOM_ENTRY_FILES+=("${2:-}")
         shift 2
         ;;
       --with-git-hook)
@@ -235,6 +291,70 @@ prepare_guardrail_options() {
     WITH_GITHUB_ACTIONS=1
     WITH_STRICT_SPEC_CHECKS=1
   fi
+}
+
+append_resolved_entry_file() {
+  local path="$1"
+
+  path="$(trim_whitespace "$path")"
+  [ -n "$path" ] || return 0
+  if [ "${#RESOLVED_ENTRY_FILES[@]}" -eq 0 ] || append_unique_value "$path" "${RESOLVED_ENTRY_FILES[@]}"; then
+    RESOLVED_ENTRY_FILES+=("$path")
+  fi
+}
+
+entry_document_source_path() {
+  local target_file="$1"
+  local candidate=""
+
+  for candidate in "${RESOLVED_ENTRY_FILES[@]-}"; do
+    if [ "$candidate" != "$target_file" ] && [ -f "$candidate" ]; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+
+  candidate="$(first_existing_entry_document_path || true)"
+  if [ -n "$candidate" ] && [ "$candidate" != "$target_file" ]; then
+    printf '%s' "$candidate"
+    return 0
+  fi
+
+  return 1
+}
+
+resolve_entry_documents() {
+  local requested_tool=""
+  local entry_file=""
+
+  RESOLVED_ENTRY_FILES=()
+
+  if [ "${#ENTRY_TOOLS[@]}" -eq 0 ] && [ "${#CUSTOM_ENTRY_FILES[@]}" -eq 0 ]; then
+    while IFS= read -r entry_file; do
+      append_resolved_entry_file "$entry_file"
+    done <<EOF
+$(default_entry_doc_files)
+EOF
+    return 0
+  fi
+
+  for requested_tool in "${ENTRY_TOOLS[@]-}"; do
+    if ! entry_file="$(entry_doc_files_for_tool "$requested_tool" 2>/dev/null)"; then
+      printf 'Unknown entry tool: %s\n' "$requested_tool" >&2
+      printf 'Supported tools: codex, claude-code, gemini-cli, all\n' >&2
+      exit 1
+    fi
+
+    while IFS= read -r entry_file; do
+      append_resolved_entry_file "$entry_file"
+    done <<EOF
+$(entry_doc_files_for_tool "$requested_tool")
+EOF
+  done
+
+  for entry_file in "${CUSTOM_ENTRY_FILES[@]-}"; do
+    append_resolved_entry_file "$entry_file"
+  done
 }
 
 detect_environment() {
@@ -493,15 +613,29 @@ render_support_template() {
 }
 
 render_entry_documents() {
-  local agents_template=""
+  local target_file=""
+  local source_file=""
+  local content=""
 
-  render_template "CLAUDE.md.tpl" "CLAUDE.md"
+  for target_file in "${RESOLVED_ENTRY_FILES[@]-}"; do
+    if [ -f "$target_file" ] && [ "$FORCE" -ne 1 ]; then
+      SKIPPED_FILES+=("$target_file")
+      continue
+    fi
 
-  if agents_template="$(resolve_template_file "AGENTS.md.tpl" 2>/dev/null)"; then
-    render_template "AGENTS.md.tpl" "AGENTS.md"
-  else
-    render_template "CLAUDE.md.tpl" "AGENTS.md"
-  fi
+    if [ "$FORCE" -ne 1 ]; then
+      source_file="$(entry_document_source_path "$target_file" || true)"
+    else
+      source_file=""
+    fi
+
+    if [ -n "$source_file" ]; then
+      content="$(cat "$source_file")"
+      write_rendered_file "$target_file" "$content"
+    else
+      render_template "CLAUDE.md.tpl" "$target_file"
+    fi
+  done
 }
 
 runtime_bundle_copy_paths() {
@@ -706,6 +840,9 @@ output_report() {
   printf '{'
   printf '"status":"success",'
   printf '"project":"%s",' "$(json_escape "$PROJECT_NAME")"
+  printf '"entry_files":'
+  append_tracked_array_json "RESOLVED_ENTRY_FILES"
+  printf ','
   printf '"created_files":'
   append_tracked_array_json "CREATED_FILES"
   printf ','
@@ -722,7 +859,7 @@ output_report() {
   printf '"next_steps":'
   if [ "$java_stack_recommended" -eq 1 ] && [ "$WITH_STRONG_CONSTRAINTS" -eq 0 ] && [ "$WITH_GIT_HOOK" -eq 0 ] && [ "$WITH_HUSKY" -eq 0 ] && [ "$WITH_GITHUB_ACTIONS" -eq 0 ]; then
     append_array_json \
-      "Edit AGENTS.md to add project-specific architecture details" \
+      "Review the generated entry doc(s) and add project-specific architecture details" \
       "Refresh the Java inventory with bash scripts/scan-java-project.sh --json before hydrating project docs after major code changes" \
       "After init, have the coding agent read key project files before filling docs/project/; do not rely on guesses" \
       "Cover build files, entrypoints, package structure, representative adapters, core services, and application.yml before claiming project facts" \
@@ -739,7 +876,7 @@ output_report() {
       "Add doc impact checks, architecture linting, spec validation, and harness GC to your CI pipeline"
   else
     append_array_json \
-      "Edit AGENTS.md to add project-specific architecture details" \
+      "Review the generated entry doc(s) and add project-specific architecture details" \
       "$( [ "$java_stack_recommended" -eq 1 ] && printf '%s' 'Refresh the Java inventory with bash scripts/scan-java-project.sh --json before hydrating project docs after major code changes' )" \
       "After init, have the coding agent read key project files before filling docs/project/; do not rely on guesses" \
       "Cover build files, entrypoints, package structure, representative adapters, core services, and application.yml before claiming project facts" \
@@ -760,6 +897,7 @@ output_report() {
 main() {
   parse_args "$@"
   prepare_guardrail_options
+  resolve_entry_documents
   init_template_resolver "$DEFAULT_TEMPLATES_DIR" "$USER_TEMPLATE_ROOT" ".harness/templates"
   detect_environment
   create_directories

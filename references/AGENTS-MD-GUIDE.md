@@ -4,8 +4,9 @@
 
 ## Purpose
 
-`AGENTS.md` is the short index an agent reads first. It is not the place to
-dump every rule in the project.
+`AGENTS.md` is the short index an agent reads first. In some tools the same
+canonical content may instead be emitted as `CLAUDE.md` or `GEMINI.md`. It is
+not the place to dump every rule in the project.
 
 ## Recommended Structure
 

@@ -6,12 +6,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=scripts/lib/doc-paths.sh
 . "$SCRIPT_DIR/lib/doc-paths.sh"
+# shellcheck source=scripts/lib/entry-docs.sh
+. "$SCRIPT_DIR/lib/entry-docs.sh"
 
 ENTRY_SCORE=0
 ENTRY_LINE_COUNT=0
 ENTRY_STATUS=""
 ENTRY_DETAILS=""
-ENTRY_FIX="Run /harness init to create AGENTS.md or CLAUDE.md."
+ENTRY_FIX="Run /harness init to create an entry doc such as AGENTS.md, CLAUDE.md, or GEMINI.md."
 
 DOC_SCORE=0
 DOC_STATUS=""
@@ -91,11 +93,7 @@ EOF
 }
 
 first_existing_entry_document() {
-  if [ -f AGENTS.md ]; then
-    printf 'AGENTS.md'
-  elif [ -f CLAUDE.md ]; then
-    printf 'CLAUDE.md'
-  fi
+  first_existing_entry_document_path || true
 }
 
 ci_files() {
@@ -135,7 +133,7 @@ score_entry_document() {
 
   if [ -z "$file" ]; then
     ENTRY_LINE_COUNT=0
-    ENTRY_STATUS="No AGENTS.md or CLAUDE.md found"
+    ENTRY_STATUS="No AGENTS.md, CLAUDE.md, or GEMINI.md found"
     ENTRY_DETAILS="Missing entry document"
     return
   fi

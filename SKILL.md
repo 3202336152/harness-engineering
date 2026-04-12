@@ -65,18 +65,18 @@ Execution flow:
 3. Create the standard `docs/project/`, `docs/features/`,
    `docs/exec-plans/{active,completed,tech-debt}/`, `docs/product-specs/`,
    `docs/references/`, and `.github/` directories.
-4. Render compatibility docs plus project-level spec templates from `assets/templates/`.
+4. Render the canonical entry template into the requested tool-specific filenames, plus the project-level spec templates from `assets/templates/`.
 5. Create `.harness/architecture.json`, `.harness/spec-policy.json`, `.harness/doc-impact-rules.json`, `.harness/context-policy.json`, `.harness/run-policy.json`, and `.harness/observability-policy.json`.
 6. Create `.harness/runtime/task-memory.json`, `.harness/runtime/last-audit.json`, `.harness/runtime/progress.md`, `.harness/evidence/`, and `.harness/metrics/`.
 7. Optionally vendor the runtime bundle and scaffold local guardrails when strong constraints are requested.
 8. When `--with-strong-constraints` is requested, also enable strict spec validation in the generated local hook so placeholder docs are blocked before commit.
-9. Skip existing files unless `--force` is supplied.
-10. Output a JSON summary with created files, skipped files, enabled guardrails, and next steps.
+9. Skip existing files unless `--force` is supplied, so rerunning init can add missing tool-specific entry files without overwriting the existing docs.
+10. Output a JSON summary with entry files, created files, skipped files, enabled guardrails, and next steps.
 
 Command:
 
 ```bash
-bash scripts/init-harness.sh [--project-name <name>] [--description <text>] [--template-root <path>] [--profile <name>] [--with-git-hook] [--with-husky] [--with-github-actions] [--with-strong-constraints] [--with-strict-spec-checks] [--force] [--dry-run]
+bash scripts/init-harness.sh [--project-name <name>] [--description <text>] [--template-root <path>] [--profile <name>] [--tool <name>] [--entry-file <path>] [--with-git-hook] [--with-husky] [--with-github-actions] [--with-strong-constraints] [--with-strict-spec-checks] [--force] [--dry-run]
 ```
 
 Template lookup order for scaffolding:
@@ -88,6 +88,9 @@ Template lookup order for scaffolding:
 
 Generated project-level docs also include `template_version`, `template_profile`, and `template_language` frontmatter.
 The scaffold also adds `docs/project/运行基线.md` and `docs/project/可观测性基线.md` so rollout, on-call, and telemetry rules are part of the shared truth.
+By default, init renders both `CLAUDE.md` and `AGENTS.md` from the same canonical entry template so common agent tools share identical content.
+Use `--tool codex`, `--tool claude-code`, `--tool gemini-cli`, or `--tool all` to target specific tool filenames; rerunning init with another tool adds the missing entry file instead of replacing the previous one.
+Use `--entry-file <path>` when a tool expects a custom entry filename that is not built in.
 For Java repos, the default profile is `java-backend-service`, and you can override it with `--profile`.
 For Java repos that want commit-time and CI-time enforcement instead of “remember to run commands,” prefer `--with-strong-constraints`.
 
