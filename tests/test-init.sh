@@ -65,6 +65,7 @@ assert_file_exists ".harness/context-policy.json"
 assert_file_exists ".harness/run-policy.json"
 assert_file_exists ".harness/observability-policy.json"
 assert_file_exists ".harness/runtime/task-memory.json"
+assert_file_exists ".harness/runtime/last-audit.json"
 assert_file_exists ".harness/runtime/progress.md"
 assert_dir_exists ".harness/evidence"
 assert_dir_exists ".harness/metrics"
@@ -76,7 +77,24 @@ assert_file_not_exists ".git/hooks/pre-commit"
 assert_file_contains "docs/project/项目架构.md" "template_version: 1.1.0"
 assert_file_contains "docs/project/项目架构.md" "template_profile: generic"
 assert_file_contains "AGENTS.md" "docs/project/核心信念.md"
+assert_file_contains "AGENTS.md" "## 初始化后项目文档补全"
+assert_file_contains "AGENTS.md" "pom.xml"
+assert_file_contains "AGENTS.md" "ApplicationService"
+assert_file_contains "AGENTS.md" "application.yml"
+assert_file_contains "AGENTS.md" "scan-java-project.sh"
+assert_file_contains "AGENTS.md" ".harness/runtime/java-doc-scan.json"
 assert_file_contains "CLAUDE.md" "docs/project/核心信念.md"
+assert_file_contains "CLAUDE.md" "## 启动检查（每次对话开始时执行）"
+assert_file_contains "CLAUDE.md" ".harness/runtime/last-audit.json"
+assert_file_contains "CLAUDE.md" "必须先确认 spec 和文档前置条件已经满足"
+assert_file_contains "CLAUDE.md" "bash scripts/harness-exec.sh prepare"
+assert_file_contains "CLAUDE.md" "## 自动 Audit 触发条件"
+assert_file_contains "CLAUDE.md" "## 初始化后项目文档补全"
+assert_file_contains "CLAUDE.md" "build.gradle"
+assert_file_contains "CLAUDE.md" "Controller"
+assert_file_contains "CLAUDE.md" "待确认 / 未覆盖范围"
+assert_file_contains "CLAUDE.md" "scan-java-project.sh"
+assert_file_contains "CLAUDE.md" ".harness/runtime/java-doc-scan.json"
 assert_file_contains "docs/project/运行基线.md" "# 项目运行与变更基线"
 assert_file_contains "docs/project/运行基线.md" "## 数据变更与批处理窗口"
 assert_file_contains "docs/project/可观测性基线.md" "# 项目可观测性基线"
@@ -91,6 +109,8 @@ assert_json_field "$(cat .harness/architecture.json)" '.layers[0]' "types"
 assert_json_field "$(cat .harness/run-policy.json)" ".verify_steps[0]" "doc_impact"
 assert_json_field "$(cat .harness/observability-policy.json)" ".version" "1.0.0"
 assert_json_field "$(cat .harness/runtime/task-memory.json)" ".version" "1.0.0"
+assert_json_field "$(cat .harness/runtime/last-audit.json)" ".status" "never_run"
+assert_json_field "$output" '.next_steps | index("After init, have the coding agent read key project files before filling docs/project/; do not rely on guesses") != null' "true"
 assert_json_field "$output" ".status" "success"
 assert_json_field "$output" ".project" "sample-app"
 assert_json_field "$output" ".detected_stack" "unknown"
@@ -121,6 +141,19 @@ cat > pom.xml <<'EOF'
   <version>1.0.0</version>
 </project>
 EOF
+mkdir -p src/main/java/com/example/sample/interfaces/http
+cat > src/main/java/com/example/sample/SampleApplication.java <<'EOF'
+package com.example.sample;
+
+public class SampleApplication {
+  public static void main(String[] args) {}
+}
+EOF
+cat > src/main/java/com/example/sample/interfaces/http/SampleController.java <<'EOF'
+package com.example.sample.interfaces.http;
+
+public class SampleController {}
+EOF
 output=$(bash "$REPO_ROOT/scripts/init-harness.sh" 2>&1)
 status=$?
 assert_success "$status" "init command succeeds on maven project"
@@ -129,10 +162,15 @@ assert_file_contains "AGENTS.md" "./mvnw clean test"
 assert_file_contains "docs/project/开发规范.md" "./mvnw spotless:apply"
 assert_file_contains "docs/project/项目架构.md" "启动类和根包建议位于业务代码最上层"
 assert_file_contains "docs/project/项目架构.md" "template_profile: java-backend-service"
+assert_file_exists ".harness/runtime/java-doc-scan.json"
+assert_json_field "$(cat .harness/runtime/java-doc-scan.json)" '.inventory.entrypoints | map(.name) | index("SampleApplication") != null' "true"
+assert_json_field "$(cat .harness/runtime/java-doc-scan.json)" '.inventory.controllers | map(.name) | index("SampleController") != null' "true"
 assert_json_field "$(cat .harness/architecture.json)" '.layers[0]' "domain"
 assert_json_field "$(cat .harness/architecture.json)" '.cross_domain_allowed_via' "anti-corruption-layer"
 assert_json_field "$(cat .harness/architecture.json)" '.forbidden_dependencies | index("application -> infrastructure") != null' "true"
 assert_json_field "$(cat .harness/spec-policy.json)" ".template_pack.profile" "java-backend-service"
+assert_json_field "$output" '.next_steps | index("Refresh the Java inventory with bash scripts/scan-java-project.sh --json before hydrating project docs after major code changes") != null' "true"
+assert_json_field "$output" '.next_steps | index("For Java projects, prefer rerunning init with --with-strong-constraints so local commits and CI can block spec drift automatically") != null' "true"
 teardown_test_dir
 
 it "supports overriding the generated template profile"
@@ -195,10 +233,12 @@ assert_file_exists ".harness/skill-runtime/harness-engineering/assets/ci-templat
 assert_file_exists ".git/hooks/pre-commit"
 assert_file_exists ".github/workflows/harness-guardrails.yml"
 assert_file_contains ".git/hooks/pre-commit" ".harness/skill-runtime/harness-engineering"
+assert_file_contains ".git/hooks/pre-commit" 'validate-spec.sh" --json --strict'
 assert_file_contains ".github/workflows/harness-guardrails.yml" "HARNESS_SKILL_ROOT: \".harness/skill-runtime/harness-engineering\""
 assert_file_contains ".github/workflows/harness-guardrails.yml" 'bash "$HARNESS_SKILL_ROOT/scripts/lint-architecture.sh"'
 assert_json_field "$output" '.enabled_guardrails | index("git-hook") != null' "true"
 assert_json_field "$output" '.enabled_guardrails | index("github-actions") != null' "true"
+assert_json_field "$output" '.enabled_guardrails | index("strict-spec-checks") != null' "true"
 teardown_test_dir
 
 it "can scaffold husky-based constraints and set hooksPath"
@@ -213,6 +253,18 @@ assert_file_exists ".husky/pre-commit"
 assert_file_contains ".husky/pre-commit" ".harness/skill-runtime/harness-engineering"
 assert_eq ".husky" "$(git config --get core.hooksPath)" "git hooksPath points to .husky"
 assert_json_field "$output" '.enabled_guardrails | index("husky") != null' "true"
+teardown_test_dir
+
+it "can enable strict spec checks for husky-based constraints"
+setup_test_dir
+init_git_repo
+output=$(bash "$REPO_ROOT/scripts/init-harness.sh" --with-husky --with-strict-spec-checks 2>&1)
+status=$?
+assert_success "$status" "init command succeeds with husky strict spec checks"
+assert_file_exists ".husky/pre-commit"
+assert_file_contains ".husky/pre-commit" 'validate-spec.sh" --json --strict'
+assert_json_field "$output" '.enabled_guardrails | index("husky") != null' "true"
+assert_json_field "$output" '.enabled_guardrails | index("strict-spec-checks") != null' "true"
 teardown_test_dir
 
 it "does not create files during dry-run"

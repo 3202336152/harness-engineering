@@ -7,6 +7,7 @@ OUTPUT_JSON=0
 STRICT_MODE=-1
 WRITE_FIX_PLAN=""
 AUTOFIX_SAFE=0
+JAVA_DOC_SCAN_PATH=".harness/runtime/java-doc-scan.json"
 
 MISSING_PROJECT_DOCS=()
 INVALID_FEATURES=()
@@ -238,6 +239,132 @@ load_template_pack_metadata() {
   PROFILE_DESCRIPTION="$(describe_template_profile "$TEMPLATE_PROFILE")"
 }
 
+java_doc_coverage_enabled() {
+  case "$TEMPLATE_PROFILE" in
+    java-backend-service|java-batch-job|java-adapter)
+      return 0
+      ;;
+  esac
+
+  [ "$STACK" = "java-maven" ] || [ "$STACK" = "java-gradle" ]
+}
+
+configured_project_doc_path_by_id() {
+  local doc_id="$1"
+  jq -r --arg id "$doc_id" '.project_docs[]? | select(.id == $id) | .path // empty' "$CONFIG_PATH" | head -n 1
+}
+
+project_doc_reference_path_by_id() {
+  local doc_id="$1"
+  local path=""
+
+  path="$(configured_project_doc_path_by_id "$doc_id" || true)"
+  if [ -n "$path" ] && [ "$path" != "null" ]; then
+    first_existing_project_doc_by_path "$path" || printf '%s' "$path"
+    return 0
+  fi
+
+  first_existing_project_doc "$doc_id" || project_doc_path "$doc_id" 2>/dev/null || true
+}
+
+docs_contain_symbol() {
+  local symbol="$1"
+  shift
+  local path
+
+  for path in "$@"; do
+    [ -f "$path" ] || continue
+    if grep -Fq "$symbol" "$path" 2>/dev/null; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+record_missing_java_scan_symbols() {
+  local issue_kind="$1"
+  local issue_path="$2"
+  local jq_query="$3"
+  shift 3
+  local docs=("$@")
+  local symbol=""
+  local seen=()
+
+  while IFS= read -r symbol; do
+    [ -n "$symbol" ] || continue
+    if [ "${#seen[@]}" -gt 0 ] && ! append_unique "$symbol" "${seen[@]}"; then
+      continue
+    fi
+    seen+=("$symbol")
+
+    if ! docs_contain_symbol "$symbol" "${docs[@]-}"; then
+      record_quality_issue "project" "" "${issue_path:-$JAVA_DOC_SCAN_PATH}" "$issue_kind" "$symbol"
+    fi
+  done <<EOF
+$(jq -r "$jq_query" "$JAVA_DOC_SCAN_PATH" 2>/dev/null)
+EOF
+}
+
+check_java_doc_scan_coverage() {
+  local architecture_path=""
+  local design_path=""
+  local api_path=""
+
+  if ! java_doc_coverage_enabled; then
+    return 0
+  fi
+
+  if [ ! -f "$JAVA_DOC_SCAN_PATH" ]; then
+    record_quality_issue "project" "" "$JAVA_DOC_SCAN_PATH" "missing_java_doc_scan" "$JAVA_DOC_SCAN_PATH"
+    return 0
+  fi
+
+  if ! jq -e . "$JAVA_DOC_SCAN_PATH" >/dev/null 2>&1; then
+    record_quality_issue "project" "" "$JAVA_DOC_SCAN_PATH" "invalid_java_doc_scan" "$JAVA_DOC_SCAN_PATH"
+    return 0
+  fi
+
+  architecture_path="$(project_doc_reference_path_by_id architecture)"
+  design_path="$(project_doc_reference_path_by_id design)"
+  api_path="$(project_doc_reference_path_by_id api-spec)"
+
+  record_missing_java_scan_symbols \
+    "java_scan_missing_module_reference" \
+    "${architecture_path:-$JAVA_DOC_SCAN_PATH}" \
+    '.inventory.module_paths[]? | select(. != "." and . != "")' \
+    "$architecture_path"
+
+  record_missing_java_scan_symbols \
+    "java_scan_missing_package_reference" \
+    "${architecture_path:-$JAVA_DOC_SCAN_PATH}" \
+    '.inventory.package_roots[]? | select(. != "")' \
+    "$architecture_path"
+
+  record_missing_java_scan_symbols \
+    "java_scan_missing_entrypoint_reference" \
+    "${architecture_path:-$JAVA_DOC_SCAN_PATH}" \
+    '.inventory.entrypoints[]?.name' \
+    "$architecture_path" "$design_path"
+
+  record_missing_java_scan_symbols \
+    "java_scan_missing_api_entry_reference" \
+    "${api_path:-$JAVA_DOC_SCAN_PATH}" \
+    '.inventory.controllers[]?.name, .inventory.facades[]?.name, .inventory.listeners[]?.name, .inventory.jobs[]?.name' \
+    "$api_path" "$architecture_path" "$design_path"
+
+  record_missing_java_scan_symbols \
+    "java_scan_missing_outbound_reference" \
+    "${api_path:-$JAVA_DOC_SCAN_PATH}" \
+    '.inventory.clients[]?.name' \
+    "$api_path" "$architecture_path" "$design_path"
+
+  record_missing_java_scan_symbols \
+    "java_scan_missing_service_reference" \
+    "${design_path:-$JAVA_DOC_SCAN_PATH}" \
+    '.inventory.application_services[]?.name, .inventory.domain_services[]?.name' \
+    "$design_path" "$architecture_path"
+}
+
 check_placeholder_patterns() {
   local scope="$1"
   local feature="$2"
@@ -360,6 +487,8 @@ check_project_docs() {
   done <<EOF
 $(jq -r '.project_docs[] | [.path, (.required // false)] | @tsv' "$CONFIG_PATH")
 EOF
+
+  check_java_doc_scan_coverage
 }
 
 check_feature_dir() {

@@ -105,6 +105,7 @@ copy_runtime_paths() {
     "scripts/plan-harness.sh" \
     "scripts/prepare-template-overrides.sh" \
     "scripts/resolve-task-context.sh" \
+    "scripts/scan-java-project.sh" \
     "scripts/validate-spec.sh" \
     "scripts/lib"; do
     copy_path "$relative_path"

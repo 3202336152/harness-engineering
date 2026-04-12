@@ -80,7 +80,7 @@ teardown_test_dir
 it "passes strict validation when required sections and metadata are complete"
 setup_test_dir
 init_git_repo
-mkdir -p .harness docs/project docs/features/FEAT-100-custom
+mkdir -p .harness/runtime docs/project docs/features/FEAT-100-custom
 cat > .harness/spec-policy.json <<'EOF'
 {
   "template_pack": {
@@ -111,6 +111,22 @@ cat > .harness/spec-policy.json <<'EOF'
         "required_sections": ["## 业务背景与目标", "## 验收标准"]
       }
     }
+  }
+}
+EOF
+cat > .harness/runtime/java-doc-scan.json <<'EOF'
+{
+  "status": "success",
+  "stack": "java-maven",
+  "inventory": {
+    "module_paths": [],
+    "package_roots": [],
+    "controllers": [],
+    "listeners": [],
+    "jobs": [],
+    "clients": [],
+    "application_services": [],
+    "domain_services": []
   }
 }
 EOF
@@ -164,6 +180,294 @@ status=$?
 assert_success "$status" "strict validation succeeds for completed docs"
 assert_json_field "$output" ".status" "passed"
 assert_json_field "$output" ".strict_mode" "true"
+assert_json_field "$output" ".quality.total_issue_count" "0"
+teardown_test_dir
+
+it "fails strict validation when java scan inventory is not reflected in project docs"
+setup_test_dir
+init_git_repo
+mkdir -p .harness/runtime docs/project
+cat > .harness/spec-policy.json <<'EOF'
+{
+  "template_pack": {
+    "name": "custom-pack",
+    "version": "1.1.0",
+    "profile": "java-backend-service",
+    "language": "zh-CN"
+  },
+  "quality_gate": {
+    "strict_default": false,
+    "placeholder_patterns": []
+  },
+  "project_docs": [
+    {
+      "id": "architecture",
+      "path": "docs/project/项目架构.md",
+      "required": true,
+      "required_frontmatter": ["template_version", "template_profile"],
+      "required_sections": ["## 系统上下文", "## 模块清单与职责", "## 分层与包结构", "## 事务边界与一致性"]
+    },
+    {
+      "id": "design",
+      "path": "docs/project/项目设计.md",
+      "required": true,
+      "required_frontmatter": ["template_version", "template_profile"],
+      "required_sections": ["## 设计目标", "## 当前代码挂点与职责分工"]
+    },
+    {
+      "id": "api-spec",
+      "path": "docs/project/接口规范.md",
+      "required": true,
+      "required_frontmatter": ["template_version", "template_profile"],
+      "required_sections": ["## 协议与接口类型", "## 接口清单"]
+    }
+  ],
+  "feature_spec": {
+    "base_dir": "docs/features",
+    "required_docs": []
+  }
+}
+EOF
+cat > .harness/runtime/java-doc-scan.json <<'EOF'
+{
+  "status": "success",
+  "stack": "java-maven",
+  "inventory": {
+    "module_paths": ["order-app"],
+    "package_roots": ["com.example.order"],
+    "controllers": [{"name": "OrderController", "path": "src/main/java/com/example/order/interfaces/http/OrderController.java"}],
+    "listeners": [{"name": "OrderCreatedListener", "path": "src/main/java/com/example/order/interfaces/mq/OrderCreatedListener.java"}],
+    "jobs": [{"name": "OrderRepairJob", "path": "src/main/java/com/example/order/interfaces/job/OrderRepairJob.java"}],
+    "clients": [{"name": "PaymentClient", "path": "src/main/java/com/example/order/infrastructure/client/PaymentClient.java"}],
+    "application_services": [{"name": "OrderApplicationService", "path": "src/main/java/com/example/order/application/OrderApplicationService.java"}],
+    "domain_services": [{"name": "OrderDomainService", "path": "src/main/java/com/example/order/domain/service/OrderDomainService.java"}]
+  }
+}
+EOF
+cat > docs/project/项目架构.md <<'EOF'
+---
+id: project-architecture
+title: 项目架构
+type: project-architecture
+status: active
+owner: team
+last_updated: 2026-04-12
+template_version: 1.1.0
+template_profile: java-backend-service
+---
+
+# 项目架构
+
+## 系统上下文
+
+订单服务负责创建订单。
+
+## 模块清单与职责
+
+这里只写了泛化描述，没有真实模块名。
+
+## 分层与包结构
+
+这里只写了 interfaces、application、domain、infrastructure。
+
+## 事务边界与一致性
+
+本地事务提交后异步发消息。
+EOF
+cat > docs/project/项目设计.md <<'EOF'
+---
+id: project-design
+title: 项目设计
+type: project-design
+status: active
+owner: team
+last_updated: 2026-04-12
+template_version: 1.1.0
+template_profile: java-backend-service
+---
+
+# 项目设计
+
+## 设计目标
+
+收口业务规则。
+
+## 当前代码挂点与职责分工
+
+这里只写接口层和服务层，没有真实类名。
+EOF
+cat > docs/project/接口规范.md <<'EOF'
+---
+id: project-api-spec
+title: 项目接口规范
+type: project-api-spec
+status: active
+owner: team
+last_updated: 2026-04-12
+template_version: 1.1.0
+template_profile: java-backend-service
+---
+
+# 项目接口规范
+
+## 协议与接口类型
+
+HTTP、MQ、定时任务。
+
+## 接口清单
+
+这里只写协议，没有真实入口类。
+EOF
+output=$(bash "$REPO_ROOT/scripts/validate-spec.sh" --json --strict 2>&1)
+status=$?
+assert_eq "1" "$status" "strict validation fails when java scan inventory is not covered"
+assert_json_field "$output" ".status" "invalid"
+assert_json_field "$output" '.project.quality_issues | map(select(.kind == "java_scan_missing_package_reference" and .detail == "com.example.order")) | length' "1"
+assert_json_field "$output" '.project.quality_issues | map(select(.kind == "java_scan_missing_api_entry_reference" and .detail == "OrderController")) | length' "1"
+assert_json_field "$output" '.project.quality_issues | map(select(.kind == "java_scan_missing_api_entry_reference" and .detail == "OrderCreatedListener")) | length' "1"
+assert_json_field "$output" '.project.quality_issues | map(select(.kind == "java_scan_missing_outbound_reference" and .detail == "PaymentClient")) | length' "1"
+assert_json_field "$output" '.project.quality_issues | map(select(.kind == "java_scan_missing_service_reference" and .detail == "OrderApplicationService")) | length' "1"
+teardown_test_dir
+
+it "passes strict validation when java scan inventory is covered by project docs"
+setup_test_dir
+init_git_repo
+mkdir -p .harness/runtime docs/project
+cat > .harness/spec-policy.json <<'EOF'
+{
+  "template_pack": {
+    "name": "custom-pack",
+    "version": "1.1.0",
+    "profile": "java-backend-service",
+    "language": "zh-CN"
+  },
+  "quality_gate": {
+    "strict_default": false,
+    "placeholder_patterns": []
+  },
+  "project_docs": [
+    {
+      "id": "architecture",
+      "path": "docs/project/项目架构.md",
+      "required": true,
+      "required_frontmatter": ["template_version", "template_profile"],
+      "required_sections": ["## 系统上下文", "## 模块清单与职责", "## 分层与包结构", "## 事务边界与一致性"]
+    },
+    {
+      "id": "design",
+      "path": "docs/project/项目设计.md",
+      "required": true,
+      "required_frontmatter": ["template_version", "template_profile"],
+      "required_sections": ["## 设计目标", "## 当前代码挂点与职责分工"]
+    },
+    {
+      "id": "api-spec",
+      "path": "docs/project/接口规范.md",
+      "required": true,
+      "required_frontmatter": ["template_version", "template_profile"],
+      "required_sections": ["## 协议与接口类型", "## 接口清单"]
+    }
+  ],
+  "feature_spec": {
+    "base_dir": "docs/features",
+    "required_docs": []
+  }
+}
+EOF
+cat > .harness/runtime/java-doc-scan.json <<'EOF'
+{
+  "status": "success",
+  "stack": "java-maven",
+  "inventory": {
+    "module_paths": ["order-app"],
+    "package_roots": ["com.example.order"],
+    "controllers": [{"name": "OrderController", "path": "src/main/java/com/example/order/interfaces/http/OrderController.java"}],
+    "listeners": [{"name": "OrderCreatedListener", "path": "src/main/java/com/example/order/interfaces/mq/OrderCreatedListener.java"}],
+    "jobs": [{"name": "OrderRepairJob", "path": "src/main/java/com/example/order/interfaces/job/OrderRepairJob.java"}],
+    "clients": [{"name": "PaymentClient", "path": "src/main/java/com/example/order/infrastructure/client/PaymentClient.java"}],
+    "application_services": [{"name": "OrderApplicationService", "path": "src/main/java/com/example/order/application/OrderApplicationService.java"}],
+    "domain_services": [{"name": "OrderDomainService", "path": "src/main/java/com/example/order/domain/service/OrderDomainService.java"}]
+  }
+}
+EOF
+cat > docs/project/项目架构.md <<'EOF'
+---
+id: project-architecture
+title: 项目架构
+type: project-architecture
+status: active
+owner: team
+last_updated: 2026-04-12
+template_version: 1.1.0
+template_profile: java-backend-service
+---
+
+# 项目架构
+
+## 系统上下文
+
+订单服务负责创建订单，基础包为 com.example.order。
+
+## 模块清单与职责
+
+核心模块 order-app 负责下单与状态流转。
+
+## 分层与包结构
+
+包根 com.example.order，下分 interfaces、application、domain、infrastructure。
+
+## 事务边界与一致性
+
+本地事务提交后异步发消息，外部支付走 PaymentClient。
+EOF
+cat > docs/project/项目设计.md <<'EOF'
+---
+id: project-design
+title: 项目设计
+type: project-design
+status: active
+owner: team
+last_updated: 2026-04-12
+template_version: 1.1.0
+template_profile: java-backend-service
+---
+
+# 项目设计
+
+## 设计目标
+
+收口业务规则。
+
+## 当前代码挂点与职责分工
+
+`OrderApplicationService` 编排主流程，`OrderDomainService` 承担核心规则。
+EOF
+cat > docs/project/接口规范.md <<'EOF'
+---
+id: project-api-spec
+title: 项目接口规范
+type: project-api-spec
+status: active
+owner: team
+last_updated: 2026-04-12
+template_version: 1.1.0
+template_profile: java-backend-service
+---
+
+# 项目接口规范
+
+## 协议与接口类型
+
+HTTP、MQ、定时任务。
+
+## 接口清单
+
+`OrderController` 提供 HTTP 入站接口，`OrderCreatedListener` 消费订单事件，`OrderRepairJob` 负责补偿任务。
+EOF
+output=$(bash "$REPO_ROOT/scripts/validate-spec.sh" --json --strict 2>&1)
+status=$?
+assert_success "$status" "strict validation succeeds when java scan inventory is covered"
+assert_json_field "$output" ".status" "passed"
 assert_json_field "$output" ".quality.total_issue_count" "0"
 teardown_test_dir
 

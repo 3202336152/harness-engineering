@@ -51,6 +51,8 @@ SECURITY_FIX="Document security guidance in $(project_doc_path security) and ign
 OVERALL_SCORE=0
 MATURITY_LEVEL=0
 MATURITY_LABEL="No Harness"
+LAST_AUDIT_PATH=".harness/runtime/last-audit.json"
+LAST_AUDIT_WRITTEN=0
 
 append_detail() {
   if [ -n "$1" ]; then
@@ -550,7 +552,35 @@ emit_entry_dimension() {
   printf ',"fix":"%s"}' "$(json_escape "$ENTRY_FIX")"
 }
 
+write_last_audit_snapshot() {
+  local priority_fixes_json="$1"
+  local timestamp=""
+
+  if [ ! -d .harness ]; then
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$LAST_AUDIT_PATH")"
+  timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  cat > "$LAST_AUDIT_PATH" <<EOF
+{
+  "version": "1.0.0",
+  "status": "completed",
+  "last_run_at": "$(json_escape "$timestamp")",
+  "overall_score": $OVERALL_SCORE,
+  "maturity_level": $MATURITY_LEVEL,
+  "maturity_label": "$(json_escape "$MATURITY_LABEL")",
+  "priority_fixes": $priority_fixes_json
+}
+EOF
+  LAST_AUDIT_WRITTEN=1
+}
+
 output_report() {
+  local priority_fixes_json=""
+  priority_fixes_json="$(emit_priority_fixes)"
+
   printf '{'
   printf '"status":"completed",'
   printf '"overall_score":%s,' "$OVERALL_SCORE"
@@ -581,8 +611,14 @@ output_report() {
   printf '"security_governance":'
   emit_dimension "$SECURITY_SCORE" "0.10" "$SECURITY_STATUS" "$SECURITY_DETAILS" "$SECURITY_FIX"
   printf '},'
+  printf '"snapshot_path":'
+  if [ "$LAST_AUDIT_WRITTEN" -eq 1 ]; then
+    printf '"%s",' "$(json_escape "$LAST_AUDIT_PATH")"
+  else
+    printf 'null,'
+  fi
   printf '"priority_fixes":'
-  emit_priority_fixes
+  printf '%s' "$priority_fixes_json"
   printf '}\n'
 }
 
@@ -596,6 +632,7 @@ main() {
   score_exec_plans
   score_security_governance
   calculate_overall
+  write_last_audit_snapshot "$(emit_priority_fixes)"
   output_report
 }
 

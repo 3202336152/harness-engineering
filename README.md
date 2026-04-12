@@ -68,6 +68,7 @@ npx skills add 3202336152/harness-engineering
 - 项目规则通过 `.harness/spec-policy.json` 描述
 - 功能文档通过 `bash scripts/new-feature-spec.sh ...` 生成，并附带 `manifest.json`
 - 执行计划通过 `bash scripts/plan-harness.sh ...` 同时生成 `md + json`
+- 真正开始一个功能开发时，优先使用 `bash scripts/harness-exec.sh prepare ...` 或 `bash scripts/new-feature-spec.sh ...` 补齐 spec；`/harness plan` 更适合作为执行计划记录，不应成为唯一前置入口
 - 任务上下文通过 `bash scripts/resolve-task-context.sh --task ... --json` 解析并可落盘为 bundle
 - 代码改动与文档更新的一致性可通过 `bash scripts/check-doc-impact.sh --json --staged` 进行门禁
 - 结构完整性通过 `bash scripts/validate-spec.sh --json` 校验
@@ -77,17 +78,30 @@ npx skills add 3202336152/harness-engineering
 - 模板升级后的历史文档可通过 `bash scripts/migrate-template-docs.sh --json` 做带备份的安全迁移
 - 运行期证据采集策略可通过 `.harness/observability-policy.json` 配置
 - 运行记录会沉淀到 `.harness/runs/`、`.harness/metrics/`、`.harness/evidence/`、`.harness/runtime/`
+- 审计结果会在已初始化项目中刷新 `.harness/runtime/last-audit.json`，便于 AI 判断是否长期未做健康检查
 - 旧的上下文 bundle、run record、evidence 目录可通过 `bash scripts/harness-gc.sh --json` 做保留清理
+
+### 初始化后的第二阶段
+
+- `init` 只负责生成规范骨架和策略文件，不会语义理解整个仓库，也不会自动把项目真实信息补进 `docs/project/`
+- 对 Java 项目，更可靠的做法是先运行 `bash scripts/scan-java-project.sh --json`，把 `.harness/runtime/java-doc-scan.json` 作为全量扫描基线
+- 然后让宿主模型基于扫描清单做关键深读，再补全项目级文档
+- 推荐关键深读清单：`pom.xml` / `build.gradle*`、启动类或主入口、`src/main/java` 前两层包结构、主要 `Controller` / `Facade` / `Listener` / `Job`、核心 `ApplicationService` / `DomainService`、`application.yml` / `application-*.yml`
+- 这里不要求把所有源码全文一次性塞进上下文，但必须先完成全量扫描，再覆盖代表性入口、核心链路、关键配置和主要外部集成
+- 如果仍有未确认信息，直接在文档中写“待确认 / 未覆盖范围”，不要凭空补全；完成后运行 `bash scripts/validate-spec.sh --json --strict`
+- 对 Java profile，`validate-spec --strict` 会根据扫描基线检查项目架构、接口规范、项目设计是否遗漏关键模块、入口、服务和外部依赖
 
 ## 强约束模式
 
 - 默认的 `init` 只负责把规范、目录和策略文件搭起来，不会默认改你的 Git hook、Husky 或 CI 配置
 - 如果你希望把“文档影响检查 + spec 校验 + 架构 lint”接成真实门禁，需要在初始化时显式打开约束选项
+- 对个人 Java 项目，推荐直接使用 `--with-strong-constraints`，让 AI 入口约束、提交前检查和 CI 校验形成闭环，而不是依赖“记得手动跑命令”
 
 常见用法：
 
 ```bash
 bash scripts/init-harness.sh --with-strong-constraints
+bash scripts/init-harness.sh --with-git-hook --with-strict-spec-checks
 bash scripts/init-harness.sh --with-git-hook
 bash scripts/init-harness.sh --with-husky
 bash scripts/init-harness.sh --with-github-actions
@@ -95,8 +109,9 @@ bash scripts/init-harness.sh --with-github-actions
 
 说明：
 
-- `--with-strong-constraints` 会组合启用 `--with-git-hook` 和 `--with-github-actions`
+- `--with-strong-constraints` 会组合启用 `--with-git-hook`、`--with-github-actions`，并让生成的本地 hook 使用 `validate-spec --strict`
 - `--with-git-hook` 会生成 `.git/hooks/pre-commit`
+- `--with-strict-spec-checks` 可与 `--with-git-hook` 或 `--with-husky` 组合使用，让本地 hook 直接运行 `validate-spec --json --strict`
 - `--with-husky` 会生成 `.husky/pre-commit`，并把仓库的 `core.hooksPath` 设置为 `.husky`
 - `--with-github-actions` 会生成 `.github/workflows/harness-guardrails.yml`
 - 开启任一约束选项时，会把 Skill 运行时能力 vendoring 到 `.harness/skill-runtime/harness-engineering`
@@ -113,6 +128,7 @@ bash scripts/init-harness.sh --with-github-actions
 - 历史模板迁移：`migrate-template-docs.sh` 会先备份，再调用 safe autofix 迁移结构类模板差异
 - 反馈闭环：`harness-exec.sh verify/run` 会聚合校验结果，并把 run record、metrics、task memory、progress、evidence 一起落盘
 - 长周期记忆：`.harness/runtime/task-memory.json` 与 `.harness/runtime/progress.md` 会持续记录最近任务和运行状态
+- 审计记忆：`.harness/runtime/last-audit.json` 会记录最近一次成熟度检查的时间与摘要，方便入口文档触发周期性 audit
 - 会话恢复：`harness-exec.sh restore` 可以在上下文压缩或切换会话后重建最近任务摘要与必读上下文
 - 可观测性接入：`.harness/observability-policy.json` 可以按项目配置命令输出和文件证据采集
 - 回收治理：`harness-gc.sh` 会按 `.harness/run-policy.json` 的保留策略清理旧上下文、旧记录、旧证据

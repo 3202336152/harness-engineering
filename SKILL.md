@@ -67,15 +67,16 @@ Execution flow:
    `docs/references/`, and `.github/` directories.
 4. Render compatibility docs plus project-level spec templates from `assets/templates/`.
 5. Create `.harness/architecture.json`, `.harness/spec-policy.json`, `.harness/doc-impact-rules.json`, `.harness/context-policy.json`, `.harness/run-policy.json`, and `.harness/observability-policy.json`.
-6. Create `.harness/runtime/task-memory.json`, `.harness/runtime/progress.md`, `.harness/evidence/`, and `.harness/metrics/`.
+6. Create `.harness/runtime/task-memory.json`, `.harness/runtime/last-audit.json`, `.harness/runtime/progress.md`, `.harness/evidence/`, and `.harness/metrics/`.
 7. Optionally vendor the runtime bundle and scaffold local guardrails when strong constraints are requested.
-8. Skip existing files unless `--force` is supplied.
-9. Output a JSON summary with created files, skipped files, and next steps.
+8. When `--with-strong-constraints` is requested, also enable strict spec validation in the generated local hook so placeholder docs are blocked before commit.
+9. Skip existing files unless `--force` is supplied.
+10. Output a JSON summary with created files, skipped files, enabled guardrails, and next steps.
 
 Command:
 
 ```bash
-bash scripts/init-harness.sh [--project-name <name>] [--description <text>] [--template-root <path>] [--profile <name>] [--with-git-hook] [--with-husky] [--with-github-actions] [--with-strong-constraints] [--force] [--dry-run]
+bash scripts/init-harness.sh [--project-name <name>] [--description <text>] [--template-root <path>] [--profile <name>] [--with-git-hook] [--with-husky] [--with-github-actions] [--with-strong-constraints] [--with-strict-spec-checks] [--force] [--dry-run]
 ```
 
 Template lookup order for scaffolding:
@@ -88,6 +89,24 @@ Template lookup order for scaffolding:
 Generated project-level docs also include `template_version`, `template_profile`, and `template_language` frontmatter.
 The scaffold also adds `docs/project/运行基线.md` and `docs/project/可观测性基线.md` so rollout, on-call, and telemetry rules are part of the shared truth.
 For Java repos, the default profile is `java-backend-service`, and you can override it with `--profile`.
+For Java repos that want commit-time and CI-time enforcement instead of “remember to run commands,” prefer `--with-strong-constraints`.
+
+### Post-init Project Hydration
+
+`/harness init` only scaffolds structure, templates, and policy files. It does not semantically read the whole repository or auto-fill project truth.
+
+For Java repos, first refresh `.harness/runtime/java-doc-scan.json` with `bash scripts/scan-java-project.sh --json`. The scan is the full inventory baseline for package roots, entrypoints, controllers, listeners, jobs, clients, application services, and domain services.
+
+After initialization, the host coding model should inspect the repo before filling `docs/project/*`:
+
+1. Read build files such as `pom.xml` or `build.gradle*`.
+2. Read the main startup class or equivalent entrypoint.
+3. Inspect the `src/main/java` package structure at least two levels deep.
+4. Read representative adapters such as `Controller`, `Facade`, `Listener`, or `Job`.
+5. Read core orchestration and domain services such as `ApplicationService` or `DomainService`.
+6. Read `application.yml` or `application-*.yml`.
+
+Do not confuse “full inventory scan” with “load every source file into context.” The intended flow is full scan first, then targeted deep reading. If coverage is incomplete, record `待确认` or `未覆盖范围` rather than guessing. After hydrating project docs, run `bash scripts/validate-spec.sh --json --strict`; for Java profiles it now checks whether the scan inventory is reflected in project docs.
 
 ## Command: /harness audit
 
@@ -120,12 +139,14 @@ bash scripts/audit-harness.sh
 ```
 
 The script prints JSON only on stdout so agents can parse it safely.
+When `.harness/` already exists, the audit also refreshes `.harness/runtime/last-audit.json` so the entry document can reason about audit staleness without relying on chat memory.
 
 ## Command: /harness plan
 
 Use this when the user asks to implement a feature following harness rules.
 The plan should align with the project-level spec set in `docs/project/`
 and remind the user to update the related feature spec pack in `docs/features/`.
+If the required feature spec pack does not exist yet, create it with `harness-exec.sh prepare` or `new-feature-spec.sh` before relying on the execution plan alone.
 
 Plan template:
 

@@ -318,6 +318,22 @@ assert_json_number_gte "$output" ".dimensions.doc_structure.score" "75"
 assert_json_number_gte "$output" ".dimensions.architecture_constraints.score" "60"
 teardown_test_dir
 
+it "writes a reusable audit snapshot for initialized harness projects"
+setup_test_dir
+init_git_repo
+seed_project_level_spec_project
+git add -A >/dev/null 2>&1
+git commit -m "seed project spec structure" --quiet >/dev/null 2>&1
+output=$(bash "$REPO_ROOT/scripts/audit-harness.sh" 2>&1)
+status=$?
+assert_success "$status" "audit command succeeds and writes snapshot"
+assert_file_exists ".harness/runtime/last-audit.json"
+assert_json_field "$output" ".snapshot_path" ".harness/runtime/last-audit.json"
+assert_json_field "$(cat .harness/runtime/last-audit.json)" ".status" "completed"
+assert_json_field "$(cat .harness/runtime/last-audit.json)" '.last_run_at != null' "true"
+assert_json_number_gte "$(cat .harness/runtime/last-audit.json)" ".overall_score" "0"
+teardown_test_dir
+
 it "surfaces line-count warnings for oversized entry documents"
 setup_test_dir
 init_git_repo

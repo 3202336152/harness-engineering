@@ -16,6 +16,7 @@ template_language: {{TEMPLATE_LANGUAGE}}
 
 本文是项目级共享架构基线，面向开发、评审、测试、运维和 AI 代理。
 对于复杂后端项目，这份文档必须优先讲清楚当前系统的模块边界、主链路、关键表、消息链路、事务边界和排障入口，而不是只写抽象原则。Java/Spring 项目可直接按这里的分层与落点补充真实实现。
+如果仓库存在 `.harness/runtime/java-doc-scan.json`，请先用其中的 `module_paths`、`package_roots`、`entrypoints` 校对本文，再补正文细节。
 
 ## 当前模板画像
 

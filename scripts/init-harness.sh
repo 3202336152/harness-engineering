@@ -11,6 +11,7 @@ WITH_GIT_HOOK=0
 WITH_HUSKY=0
 WITH_GITHUB_ACTIONS=0
 WITH_STRONG_CONSTRAINTS=0
+WITH_STRICT_SPEC_CHECKS=0
 STACK="unknown"
 IS_GIT=0
 TODAY="$(date +%F)"
@@ -165,7 +166,7 @@ append_tracked_array_json() {
 
 usage() {
   cat <<'EOF'
-Usage: init-harness.sh [--project-name <name>] [--description <text>] [--template-root <path>] [--profile <name>] [--with-git-hook] [--with-husky] [--with-github-actions] [--with-strong-constraints] [--force] [--dry-run]
+Usage: init-harness.sh [--project-name <name>] [--description <text>] [--template-root <path>] [--profile <name>] [--with-git-hook] [--with-husky] [--with-github-actions] [--with-strong-constraints] [--with-strict-spec-checks] [--force] [--dry-run]
 EOF
 }
 
@@ -204,6 +205,10 @@ parse_args() {
         WITH_STRONG_CONSTRAINTS=1
         shift
         ;;
+      --with-strict-spec-checks)
+        WITH_STRICT_SPEC_CHECKS=1
+        shift
+        ;;
       --force)
         FORCE=1
         shift
@@ -228,6 +233,7 @@ prepare_guardrail_options() {
   if [ "$WITH_STRONG_CONSTRAINTS" -eq 1 ]; then
     WITH_GIT_HOOK=1
     WITH_GITHUB_ACTIONS=1
+    WITH_STRICT_SPEC_CHECKS=1
   fi
 }
 
@@ -340,6 +346,14 @@ test_command() {
   esac
 }
 
+validate_spec_flags() {
+  if [ "$WITH_STRICT_SPEC_CHECKS" -eq 1 ]; then
+    printf '%s' '--json --strict'
+  else
+    printf '%s' '--json'
+  fi
+}
+
 create_directories() {
   local dir
   for dir in \
@@ -422,6 +436,7 @@ render_content() {
   content="${content//'{{TEMPLATE_LANGUAGE}}'/$TEMPLATE_LANGUAGE}"
   content="${content//'{{PROFILE_DESCRIPTION}}'/$PROFILE_DESCRIPTION}"
   content="${content//'{{HARNESS_SKILL_ROOT}}'/$VENDORED_SKILL_ROOT}"
+  content="${content//'{{HARNESS_VALIDATE_SPEC_FLAGS}}'/$(validate_spec_flags)}"
   content="${content//'{{ARCHITECTURE_LAYERS_JSON}}'/$(architecture_layers_json)}"
   content="${content//'{{ARCHITECTURE_LAYER_DIRECTION}}'/$(architecture_layer_direction)}"
   content="${content//'{{ARCHITECTURE_SRC_ROOT}}'/$(architecture_src_root)}"
@@ -511,6 +526,7 @@ scripts/new-feature-spec.sh
 scripts/plan-harness.sh
 scripts/prepare-template-overrides.sh
 scripts/resolve-task-context.sh
+scripts/scan-java-project.sh
 scripts/validate-spec.sh
 scripts/lib
 EOF
@@ -617,6 +633,30 @@ generate_guardrails() {
   fi
 }
 
+generate_java_scan_baseline() {
+  local scan_path=".harness/runtime/java-doc-scan.json"
+
+  if [ "$STACK" != "java-maven" ] && [ "$STACK" != "java-gradle" ]; then
+    return 0
+  fi
+
+  if [ -f "$scan_path" ] && [ "$FORCE" -ne 1 ]; then
+    SKIPPED_FILES+=("$scan_path")
+    return 0
+  fi
+
+  if [ "$DRY_RUN" -eq 1 ]; then
+    CREATED_FILES+=("$scan_path")
+    return 0
+  fi
+
+  if bash "$SCRIPT_DIR/scan-java-project.sh" --output "$scan_path" --json >/dev/null 2>&1; then
+    CREATED_FILES+=("$scan_path")
+  else
+    printf 'Warning: Failed to generate Java inventory baseline at %s\n' "$scan_path" >&2
+  fi
+}
+
 generate_files() {
   render_entry_documents
   render_template "project/CORE-BELIEFS.md.tpl" "$(project_doc_path core-beliefs)"
@@ -637,12 +677,15 @@ generate_files() {
   render_template "run-policy.json.tpl" ".harness/run-policy.json"
   render_template "observability-policy.json.tpl" ".harness/observability-policy.json"
   render_template "task-memory.json.tpl" ".harness/runtime/task-memory.json"
+  render_template "last-audit.json.tpl" ".harness/runtime/last-audit.json"
   render_template "progress.md.tpl" ".harness/runtime/progress.md"
+  generate_java_scan_baseline
   generate_guardrails
 }
 
 output_report() {
   local enabled_guardrails=()
+  local java_stack_recommended=0
 
   if [ "$WITH_GIT_HOOK" -eq 1 ]; then
     enabled_guardrails+=("git-hook")
@@ -652,6 +695,12 @@ output_report() {
   fi
   if [ "$WITH_GITHUB_ACTIONS" -eq 1 ]; then
     enabled_guardrails+=("github-actions")
+  fi
+  if [ "$WITH_STRICT_SPEC_CHECKS" -eq 1 ]; then
+    enabled_guardrails+=("strict-spec-checks")
+  fi
+  if [ "$STACK" = "java-maven" ] || [ "$STACK" = "java-gradle" ]; then
+    java_stack_recommended=1
   fi
 
   printf '{'
@@ -671,18 +720,40 @@ output_report() {
   printf ','
   printf '"detected_stack":"%s",' "$(json_escape "$STACK")"
   printf '"next_steps":'
-  append_array_json \
-    "Edit AGENTS.md to add project-specific architecture details" \
-    "Fill in $(project_doc_path architecture) and $(project_doc_path requirements) with project-specific context" \
-    "Review .harness/spec-policy.json to align required project-level and feature-level specs" \
-    "Review .harness/doc-impact-rules.json so code changes and doc updates can be gated together" \
-    "Review .harness/context-policy.json and .harness/run-policy.json before enabling autonomous workflows" \
-    "Review .harness/observability-policy.json so logs, metrics, and traces can be captured into evidence bundles" \
-    "Create your first feature spec with bash scripts/new-feature-spec.sh --id FEAT-001 --title \"Your feature\" --owner <name> --change-types <types>" \
-    "Use bash scripts/harness-exec.sh prepare --task \"Your feature\" --feature-id FEAT-001 --title \"Your feature\" to generate plan and context together" \
-    "Use bash scripts/migrate-template-docs.sh --json after template upgrades to back up and migrate historical docs" \
-    "Run bash scripts/validate-spec.sh --json before wiring spec checks into CI" \
-    "Add doc impact checks, architecture linting, spec validation, and harness GC to your CI pipeline"
+  if [ "$java_stack_recommended" -eq 1 ] && [ "$WITH_STRONG_CONSTRAINTS" -eq 0 ] && [ "$WITH_GIT_HOOK" -eq 0 ] && [ "$WITH_HUSKY" -eq 0 ] && [ "$WITH_GITHUB_ACTIONS" -eq 0 ]; then
+    append_array_json \
+      "Edit AGENTS.md to add project-specific architecture details" \
+      "Refresh the Java inventory with bash scripts/scan-java-project.sh --json before hydrating project docs after major code changes" \
+      "After init, have the coding agent read key project files before filling docs/project/; do not rely on guesses" \
+      "Cover build files, entrypoints, package structure, representative adapters, core services, and application.yml before claiming project facts" \
+      "Fill in $(project_doc_path architecture) and $(project_doc_path requirements) from observed code, and mark unknown areas as 待确认 or 未覆盖范围" \
+      "Review .harness/spec-policy.json to align required project-level and feature-level specs" \
+      "Review .harness/doc-impact-rules.json so code changes and doc updates can be gated together" \
+      "Review .harness/context-policy.json and .harness/run-policy.json before enabling autonomous workflows" \
+      "Review .harness/observability-policy.json so logs, metrics, and traces can be captured into evidence bundles" \
+      "Create your first feature spec with bash scripts/new-feature-spec.sh --id FEAT-001 --title \"Your feature\" --owner <name> --change-types <types>" \
+      "Use bash scripts/harness-exec.sh prepare --task \"Your feature\" --feature-id FEAT-001 --title \"Your feature\" to generate plan and context together" \
+      "For Java projects, prefer rerunning init with --with-strong-constraints so local commits and CI can block spec drift automatically" \
+      "Use bash scripts/migrate-template-docs.sh --json after template upgrades to back up and migrate historical docs" \
+      "Run bash scripts/validate-spec.sh --json --strict after project docs are hydrated, then wire spec checks into CI" \
+      "Add doc impact checks, architecture linting, spec validation, and harness GC to your CI pipeline"
+  else
+    append_array_json \
+      "Edit AGENTS.md to add project-specific architecture details" \
+      "$( [ "$java_stack_recommended" -eq 1 ] && printf '%s' 'Refresh the Java inventory with bash scripts/scan-java-project.sh --json before hydrating project docs after major code changes' )" \
+      "After init, have the coding agent read key project files before filling docs/project/; do not rely on guesses" \
+      "Cover build files, entrypoints, package structure, representative adapters, core services, and application.yml before claiming project facts" \
+      "Fill in $(project_doc_path architecture) and $(project_doc_path requirements) from observed code, and mark unknown areas as 待确认 or 未覆盖范围" \
+      "Review .harness/spec-policy.json to align required project-level and feature-level specs" \
+      "Review .harness/doc-impact-rules.json so code changes and doc updates can be gated together" \
+      "Review .harness/context-policy.json and .harness/run-policy.json before enabling autonomous workflows" \
+      "Review .harness/observability-policy.json so logs, metrics, and traces can be captured into evidence bundles" \
+      "Create your first feature spec with bash scripts/new-feature-spec.sh --id FEAT-001 --title \"Your feature\" --owner <name> --change-types <types>" \
+      "Use bash scripts/harness-exec.sh prepare --task \"Your feature\" --feature-id FEAT-001 --title \"Your feature\" to generate plan and context together" \
+      "Use bash scripts/migrate-template-docs.sh --json after template upgrades to back up and migrate historical docs" \
+      "Run bash scripts/validate-spec.sh --json --strict after project docs are hydrated, then wire spec checks into CI" \
+      "Add doc impact checks, architecture linting, spec validation, and harness GC to your CI pipeline"
+  fi
   printf '}\n'
 }
 
