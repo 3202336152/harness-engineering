@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://harness-engineering.dev/schemas/plan-machine.schema.json",
+  "title": "Harness Machine Plan",
+  "description": "Machine-readable execution plan emitted by scripts/plan-harness.sh.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "task",
+    "feature_id",
+    "change_types",
+    "agent",
+    "created",
+    "markdown_path",
+    "required_docs",
+    "required_checks",
+    "risk_level",
+    "rollback_required"
+  ],
+  "properties": {
+    "task": {
+      "type": "string",
+      "minLength": 1
+    },
+    "feature_id": {
+      "type": "string"
+    },
+    "change_types": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "agent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "markdown_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "required_docs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "required_checks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": ["low", "medium", "high"]
+    },
+    "rollback_required": {
+      "type": "boolean"
+    }
+  }
+}

@@ -51,6 +51,8 @@ assert_file_exists "$REPO_ROOT/scripts/check-rollback-readiness.sh"
 assert_file_exists "$REPO_ROOT/scripts/migrate-template-docs.sh"
 assert_file_exists "$REPO_ROOT/scripts/collect-runtime-evidence.sh"
 assert_file_exists "$REPO_ROOT/scripts/harness-gc.sh"
+assert_file_exists "$REPO_ROOT/scripts/check-runtime-deps.sh"
+assert_file_exists "$REPO_ROOT/schemas/plan-machine.schema.json"
 assert_file_exists "$REPO_ROOT/assets/templates/project/ARCHITECTURE.md.tpl"
 assert_file_exists "$REPO_ROOT/assets/templates/project/REQUIREMENTS.md.tpl"
 assert_file_exists "$REPO_ROOT/assets/templates/project/OPERATIONS.md.tpl"
@@ -72,6 +74,13 @@ assert_file_exists "$REPO_ROOT/doc/手册/Harness工程手册.md"
 assert_file_exists "$REPO_ROOT/doc/历史设计/00-索引.md"
 assert_file_exists "$REPO_ROOT/doc/归档/Skill实施设计文档.md"
 
+it "can self-check runtime dependencies on the current machine"
+output=$(bash "$REPO_ROOT/scripts/check-runtime-deps.sh" --json 2>&1)
+status=$?
+assert_success "$status" "runtime dependency check succeeds"
+assert_json_field "$output" ".status" "ok"
+assert_json_field "$output" '.missing_commands | length' "0"
+
 it "exports a runtime-only install bundle for global installation"
 setup_test_dir
 output=$(bash "$REPO_ROOT/scripts/export-skill-package.sh" --output-dir "$TEST_TMP/dist" 2>&1)
@@ -79,8 +88,10 @@ status=$?
 assert_success "$status" "export bundle command succeeds"
 assert_file_exists "$TEST_TMP/dist/harness-engineering/SKILL.md"
 assert_file_exists "$TEST_TMP/dist/harness-engineering/scripts/init-harness.sh"
+assert_file_exists "$TEST_TMP/dist/harness-engineering/scripts/check-runtime-deps.sh"
 assert_file_exists "$TEST_TMP/dist/harness-engineering/scripts/lib/template-resolver.sh"
 assert_file_exists "$TEST_TMP/dist/harness-engineering/scripts/scan-java-project.sh"
+assert_file_exists "$TEST_TMP/dist/harness-engineering/schemas/plan-machine.schema.json"
 assert_file_exists "$TEST_TMP/dist/harness-engineering/assets/templates/project/ARCHITECTURE.md.tpl"
 assert_file_exists "$TEST_TMP/dist/harness-engineering/assets/templates/last-audit.json.tpl"
 assert_file_exists "$TEST_TMP/dist/harness-engineering/assets/hooks/pre-commit-doc-guard.sh.tpl"

@@ -19,4 +19,8 @@ else
   fail_test "publish check output missing success marker"
 fi
 
+it "covers more than one agent in official smoke-test configuration"
+assert_file_contains "$REPO_ROOT/scripts/publish-check.sh" "codex,claude-code"
+assert_file_contains "$REPO_ROOT/scripts/publish-check.sh" "project install smoke test ("
+
 print_summary

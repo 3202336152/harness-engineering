@@ -270,8 +270,10 @@ output=$(bash "$REPO_ROOT/scripts/init-harness.sh" --with-strong-constraints 2>&
 status=$?
 assert_success "$status" "init command succeeds with strong constraints"
 assert_dir_exists ".harness/skill-runtime/harness-engineering"
+assert_file_exists ".harness/skill-runtime/harness-engineering/scripts/check-runtime-deps.sh"
 assert_file_exists ".harness/skill-runtime/harness-engineering/scripts/check-doc-impact.sh"
 assert_file_exists ".harness/skill-runtime/harness-engineering/scripts/lint-architecture.sh"
+assert_file_exists ".harness/skill-runtime/harness-engineering/schemas/plan-machine.schema.json"
 assert_file_exists ".harness/skill-runtime/harness-engineering/assets/hooks/pre-commit-doc-guard.sh.tpl"
 assert_file_exists ".harness/skill-runtime/harness-engineering/assets/ci-templates/github-actions.yml.tpl"
 assert_file_exists ".git/hooks/pre-commit"

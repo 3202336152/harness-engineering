@@ -4,6 +4,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SKIP_OFFICIAL=0
+SMOKE_AGENTS="${HARNESS_PUBLISH_SMOKE_AGENTS:-codex,claude-code}"
 
 usage() {
   cat <<'EOF'
@@ -39,15 +40,39 @@ run_step() {
   "$@"
 }
 
+run_agent_install_smoke_test() {
+  local agent="$1"
+  local tmpdir=""
+
+  tmpdir="$(mktemp -d)"
+  (
+    cd "$tmpdir"
+    env CI=1 npx skills add "$REPO_ROOT" --project -a "$agent" -y >/dev/null </dev/null
+    test -f ./.agents/skills/harness-engineering/SKILL.md
+  )
+  rm -rf "$tmpdir"
+}
+
+trim_whitespace() {
+  local value="$1"
+
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
+}
+
 run_official_checks() {
+  local agents=()
+  local agent=""
+
   run_step "official validator" bash -lc 'env CI=1 npx skills-ref validate "'"$REPO_ROOT"'" </dev/null'
   run_step "skills discovery list" bash -lc 'env CI=1 npx skills add "'"$REPO_ROOT"'" --list </dev/null'
-  run_step "project install smoke test" bash -lc '
-    tmpdir=$(mktemp -d)
-    cd "$tmpdir"
-    env CI=1 npx skills add "'"$REPO_ROOT"'" --project -a codex -y >/dev/null </dev/null
-    test -f ./.agents/skills/harness-engineering/SKILL.md
-  '
+  IFS=',' read -r -a agents <<< "$SMOKE_AGENTS"
+  for agent in "${agents[@]}"; do
+    agent="$(trim_whitespace "$agent")"
+    [ -n "$agent" ] || continue
+    run_step "project install smoke test ($agent)" run_agent_install_smoke_test "$agent"
+  done
 }
 
 main() {

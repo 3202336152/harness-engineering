@@ -3,6 +3,12 @@
 一个面向 AI 编码代理的 Agent Skill，用来初始化、审计和维护
 Harness Engineering 工作环境，并为项目级与功能级 spec 提供统一模板。
 
+## 运行前提
+
+- 需要 `bash`、`git`、`jq`
+- 建议第一次在新机器使用前先执行 `bash scripts/check-runtime-deps.sh --json`
+- Windows 环境推荐使用 WSL2；当前仓库默认按 POSIX Shell 语义维护
+
 ## 安装
 
 本地开发和试点时，推荐直接使用仓库自带的 runtime-only 安装脚本：
@@ -11,7 +17,10 @@ Harness Engineering 工作环境，并为项目级与功能级 spec 提供统一
 bash scripts/install-skill.sh --global
 ```
 
+这个安装脚本会先执行 `check-runtime-deps.sh`，缺少 `bash` / `git` / `jq` 时会直接失败。
+
 它会先导出一个 runtime-only Skill 包，再安装到全局目录。安装包会保留运行时真正需要的 `SKILL.md`、核心脚本、`scripts/lib/`、`assets/templates/`、`assets/hooks/`、`assets/ci-templates/`、`references/` 和 `LICENSE`，不会把 `doc/`、`README.md`、`CHANGELOG.md`、测试和发布脚本一起装进 `~/.agents/skills/`。
+导出的 runtime-only 包现在也会包含 `scripts/check-runtime-deps.sh` 和 `schemas/plan-machine.schema.json`，方便安装后直接做依赖自检和 machine plan 校验。
 
 如果你是从远程仓库直接安装：
 
@@ -37,6 +46,12 @@ npx skills add 3202336152/harness-engineering
 | `bash scripts/harness-exec.sh verify --feature-id FEAT-001 --json` | 聚合校验，并落 run record、metrics ledger、task memory、progress、evidence |
 | `bash scripts/harness-exec.sh run --task "<任务>" --feature-id FEAT-001 --title "<标题>" --json` | 串联 `prepare -> verify -> autofix-safe -> reverify`，并按策略触发证据采集与 GC |
 | `bash scripts/harness-exec.sh restore --feature-id FEAT-001 --json` | 从 `.harness/runtime/` 恢复最近任务状态、待办检查项和推荐上下文 |
+
+重复执行语义：
+
+- `prepare` 会刷新当前任务对应的 spec 骨架、执行计划和上下文 bundle，适合在任务范围变化后重跑。
+- `verify` 和 `run` 会追加新的运行记录，并更新最新 task-memory / progress 快照，适合在实现推进过程中反复执行。
+- 如果目标是升级模板或迁移历史文档，优先使用 `migrate-template-docs.sh`，不要把 `harness-exec` 当成文档重写器。
 
 ## 仓库内容
 
@@ -68,6 +83,7 @@ npx skills add 3202336152/harness-engineering
 - 项目规则通过 `.harness/spec-policy.json` 描述
 - 功能文档通过 `bash scripts/new-feature-spec.sh ...` 生成，并附带 `manifest.json`
 - 执行计划通过 `bash scripts/plan-harness.sh ...` 同时生成 `md + json`
+- machine plan JSON 的正式 schema 位于 `schemas/plan-machine.schema.json`
 - 真正开始一个功能开发时，优先使用 `bash scripts/harness-exec.sh prepare ...` 或 `bash scripts/new-feature-spec.sh ...` 补齐 spec；`/harness plan` 更适合作为执行计划记录，不应成为唯一前置入口
 - 任务上下文通过 `bash scripts/resolve-task-context.sh --task ... --json` 解析并可落盘为 bundle
 - 代码改动与文档更新的一致性可通过 `bash scripts/check-doc-impact.sh --json --staged` 进行门禁
@@ -182,6 +198,7 @@ bash scripts/init-harness.sh --with-github-actions
 
 ```bash
 bash tests/run-tests.sh
+bash scripts/check-runtime-deps.sh --json
 bash scripts/verify-spec-compliance.sh
 bash scripts/export-skill-package.sh --output-dir .build/skill-package
 bash scripts/publish-check.sh --skip-official
@@ -198,6 +215,7 @@ bash scripts/publish-check.sh --skip-official
 - [doc/命令使用说明.md](./doc/命令使用说明.md)
 - [doc/能力与功能说明.md](./doc/能力与功能说明.md)
 - [doc/安装与试点指南.md](./doc/安装与试点指南.md)
+- [references/MATURITY-MODEL.md](./references/MATURITY-MODEL.md)
 
 ## License
 

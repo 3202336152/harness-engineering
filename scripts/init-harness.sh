@@ -645,7 +645,9 @@ LICENSE
 assets/templates
 assets/hooks
 assets/ci-templates
+schemas
 scripts/audit-harness.sh
+scripts/check-runtime-deps.sh
 scripts/check-doc-freshness.sh
 scripts/check-doc-impact.sh
 scripts/check-rollback-readiness.sh

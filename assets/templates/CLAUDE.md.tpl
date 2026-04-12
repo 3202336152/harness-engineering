@@ -42,7 +42,7 @@
 > **开始功能开发或进入大规模编码前，必须先确认 spec 和文档前置条件已经满足；未满足时先补文档，再写代码。**
 
 1. 对重要功能变更，或涉及接口、数据库、安全、配置、部署的改动，必须先确认 `docs/features/<feature-id>/` 下已有对应 spec，且没有 `TODO`、`TBD`、`待补充` 等占位内容。
-2. 如果缺少功能 spec，先运行 `bash scripts/harness-exec.sh prepare --task "<任务>" --feature-id FEAT-001 --title "<标题>" --agent codex --json`，或使用 `bash scripts/new-feature-spec.sh ...` 创建 spec 骨架，再进入实现。
+2. 如果缺少功能 spec，先运行 `bash scripts/harness-exec.sh prepare --task "<任务>" --feature-id FEAT-001 --title "<标题>" --agent <agent-name> --json`，或使用 `bash scripts/new-feature-spec.sh ...` 创建 spec 骨架，再进入实现。
 3. 修改接口、数据库、安全、配置或部署相关代码前，先对照 `.harness/doc-impact-rules.json`，确认需要同步更新的项目级和功能级文档。
 4. 每次提交前都检查 spec、测试和相关文档是否需要同步更新；如果项目已启用 Git hook、Husky 或 CI 门禁，优先让门禁脚本阻断不完整提交。
 5. 修改核心基础设施前先查看 `docs/project/核心信念.md`，避免破坏长期稳定的架构决策。

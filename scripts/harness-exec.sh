@@ -16,7 +16,7 @@ FEATURE_ID=""
 TITLE=""
 OWNER="team"
 CHANGE_TYPES=""
-AGENT="codex"
+AGENT="${HARNESS_AGENT_NAME:-unknown-agent}"
 STRICT=0
 USE_STAGED=0
 OUTPUT_JSON=0
@@ -133,7 +133,7 @@ parse_args() {
         shift 2
         ;;
       --agent)
-        AGENT="${2:-codex}"
+        AGENT="${2:-$AGENT}"
         shift 2
         ;;
       --strict)

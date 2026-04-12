@@ -88,6 +88,8 @@ main() {
 
   parse_args "$@"
 
+  bash "$SCRIPT_DIR/check-runtime-deps.sh" >/dev/null
+
   bash "$SCRIPT_DIR/export-skill-package.sh" --output-dir "$OUTPUT_DIR" >/dev/null
   PACKAGE_DIR="$OUTPUT_DIR/$PACKAGE_NAME"
 

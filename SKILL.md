@@ -3,14 +3,14 @@ name: harness-engineering
 description: >
   Scaffold, audit, and maintain AI coding agent work environments using
   Harness Engineering principles. Use when the user wants to initialize
-  AGENTS.md or docs/ structure, audit harness maturity, generate execution
+  entry docs or docs/ structure, audit harness maturity, generate execution
   plans, validate specs, check doc impact or freshness, restore recent
   task context from .harness/runtime, or prepare a project for AI coding
   agent workflows.
 license: MIT
-compatibility: Requires bash and git. Works with any language or framework.
+compatibility: Requires bash, git, and jq. Works with any language or framework. Windows users should run it from WSL2 or another POSIX-compatible shell.
 metadata:
-  author: "OpenAI Codex"
+  author: "harness-engineering"
   version: "1.0.0"
   tags: "harness-engineering,agent-environment,scaffolding,code-quality"
 allowed-tools: Bash(git:*) Read Write Edit Glob Grep
@@ -39,6 +39,7 @@ Supporting scripts extend the flow:
 
 - `scripts/lint-architecture.sh` checks configured dependency boundaries.
 - `scripts/check-doc-freshness.sh` reports stale markdown documentation.
+- `scripts/check-runtime-deps.sh` verifies local runtime dependencies such as `bash`, `git`, and `jq`.
 - `scripts/new-feature-spec.sh` creates feature-level spec packs from change types.
 - `scripts/resolve-task-context.sh` resolves the minimum required context bundle for a task.
 - `scripts/check-doc-impact.sh` blocks code changes that should have updated specs or project docs.
@@ -51,10 +52,12 @@ Supporting scripts extend the flow:
 - `scripts/collect-runtime-evidence.sh` captures configured commands and file artifacts into an evidence bundle.
 - `scripts/harness-gc.sh` prunes old context bundles, run records, and evidence directories.
 - `scripts/verify-spec-compliance.sh` validates the skill package layout.
+- `schemas/plan-machine.schema.json` defines the machine-readable execution-plan contract for downstream automation.
 
 ## Command: /harness init
 
-Use this when the project is missing `AGENTS.md`, missing core docs, or the
+Use this when the project is missing an entry doc such as `AGENTS.md` or
+`CLAUDE.md`, missing core docs, or the
 user asks to prepare a repo for AI coding agents and spec-driven delivery.
 
 Execution flow:
@@ -93,6 +96,7 @@ Use `--tool codex`, `--tool claude-code`, `--tool gemini-cli`, or `--tool all` t
 Use `--entry-file <path>` when a tool expects a custom entry filename that is not built in.
 For Java repos, the default profile is `java-backend-service`, and you can override it with `--profile`.
 For Java repos that want commit-time and CI-time enforcement instead of “remember to run commands,” prefer `--with-strong-constraints`.
+Before first use on a new machine, run `bash scripts/check-runtime-deps.sh --json` to confirm `bash`, `git`, and `jq` are available.
 
 ### Post-init Project Hydration
 
@@ -204,7 +208,7 @@ Output JSON fields:
 | `dry_run` | bool | Whether the command ran in dry-run mode |
 | `references` | array | Required project doc paths that the task should follow |
 
-The JSON file referenced by `machine_plan_path` uses a different schema from stdout and is intended for automation consumers that need `required_checks`, `risk_level`, `rollback_required`, and related metadata.
+The JSON file referenced by `machine_plan_path` uses a different schema from stdout and is intended for automation consumers that need `required_checks`, `risk_level`, `rollback_required`, and related metadata. A formal schema is published at `schemas/plan-machine.schema.json`.
 
 ## Baseline Autonomous Flow
 
@@ -213,9 +217,9 @@ Use this when the user wants a mechanically constrained local loop instead of sc
 Commands:
 
 ```bash
-bash scripts/harness-exec.sh prepare --task "Add search" --feature-id FEAT-001 --title "Add search" --agent codex --json
+bash scripts/harness-exec.sh prepare --task "Add search" --feature-id FEAT-001 --title "Add search" --agent <agent-name> --json
 bash scripts/harness-exec.sh verify --feature-id FEAT-001 --json
-bash scripts/harness-exec.sh run --task "Add search" --feature-id FEAT-001 --title "Add search" --agent codex --json
+bash scripts/harness-exec.sh run --task "Add search" --feature-id FEAT-001 --title "Add search" --agent <agent-name> --json
 bash scripts/harness-exec.sh restore --feature-id FEAT-001 --json
 ```
 
@@ -225,6 +229,12 @@ Behavior:
 - `verify` aggregates spec validation, doc impact, architecture lint, doc freshness, and rollback readiness, then writes a run record, metrics ledger entry, task memory snapshot, progress report, and evidence bundle.
 - `run` chains `prepare -> verify -> autofix-safe -> reverify`, records the final run result, and can trigger retention GC from `.harness/run-policy.json`.
 - `restore` reconstructs the latest task summary, pending checklist items, and recommended context files from `.harness/runtime/`.
+
+Rerun semantics:
+
+- `prepare` refreshes the current plan and context bundle for the task; it is safe to rerun when the task definition changes.
+- `verify` and `run` append new run records and refresh the latest task-memory snapshot; they are repeatable verification loops, not transactional one-shot commands.
+- For template upgrades or broad scaffold changes, prefer dedicated migration scripts over forcing the autonomous loop to rewrite historical docs.
 
 When resuming after context compaction, agent restart, or a paused task handoff, run `bash scripts/harness-exec.sh restore --feature-id <id> --json` before making new edits so the next session starts from recorded task memory instead of chat recall.
 
@@ -305,7 +315,7 @@ Rules:
 
 ## Context Engineering Quick Reference
 
-- Keep `AGENTS.md` under 100 lines when possible.
+- Keep the active entry doc under 100 lines when possible.
 - Use progressive disclosure: short index at the top, deep docs on demand.
 - Knowledge outside the repo is invisible to the agent.
 - Prefer machine-readable outputs such as JSON.
@@ -319,7 +329,7 @@ Rules:
 
 ## Anti-Patterns
 
-- Huge `AGENTS.md` files that try to explain everything inline.
+- Huge entry docs that try to explain everything inline.
 - Architecture rules that exist only in prose and never in CI.
 - Unstructured test output that an agent cannot parse.
 - Manual project knowledge trapped in chat history instead of the repo.

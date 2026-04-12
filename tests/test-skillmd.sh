@@ -18,6 +18,10 @@ it "uses the expected skill name"
 name=$(sed -n '/^---$/,/^---$/p' "$SKILLMD" 2>/dev/null | grep "^name:" | sed 's/name: *//')
 assert_eq "harness-engineering" "$name" "frontmatter name"
 
+it "uses a neutral metadata author"
+author=$(sed -n '/^---$/,/^---$/p' "$SKILLMD" 2>/dev/null | grep "^  author:" | sed 's/  author: *//')
+assert_eq "\"harness-engineering\"" "$author" "frontmatter metadata.author"
+
 it "keeps the body below 500 lines"
 frontmatter_end=$(grep -n "^---$" "$SKILLMD" 2>/dev/null | tail -1 | cut -d: -f1)
 if [ -n "$frontmatter_end" ]; then

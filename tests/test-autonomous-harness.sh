@@ -42,6 +42,17 @@ assert_json_field "$output" ".feature_created" "true"
 assert_json_field "$output" ".context.status" "success"
 teardown_test_dir
 
+it "prepare stage honors HARNESS_AGENT_NAME when --agent is omitted"
+setup_test_dir
+init_git_repo
+bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
+output=$(HARNESS_AGENT_NAME="claude-code" bash "$REPO_ROOT/scripts/harness-exec.sh" prepare --task "Inventory Sync" --feature-id FEAT-014 --title "Inventory Sync" --owner alice --change-types api --json 2>&1)
+status=$?
+assert_success "$status" "prepare stage succeeds with env-based agent default"
+assert_json_field "$output" ".status" "success"
+assert_json_field "$(cat docs/exec-plans/active/inventory-sync.json)" ".agent" "claude-code"
+teardown_test_dir
+
 it "verify stage aggregates harness checks"
 setup_test_dir
 init_git_repo
