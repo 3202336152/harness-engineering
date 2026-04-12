@@ -18,10 +18,20 @@
       "PLACEHOLDER",
       "<待填写>",
       "<TODO>",
-      "{{TODO}}"
+      "{{TODO}}",
+      "暂无",
+      "暂不填写",
+      "略"
     ]
   },
   "project_docs": [
+    {
+      "id": "core-beliefs",
+      "path": "docs/project/核心信念.md",
+      "required": true,
+      "required_frontmatter": ["template_version", "template_profile", "template_language"],
+      "required_sections": ["## 架构原则", "## 业务边界与领域模型", "## 技术选型", "## 一致性与数据原则", "## 接口与兼容性原则", "## 质量标准"]
+    },
     {
       "id": "architecture",
       "path": "docs/project/项目架构.md",

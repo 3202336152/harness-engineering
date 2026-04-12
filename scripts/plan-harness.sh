@@ -229,7 +229,7 @@ write_machine_plan() {
   printf '  "created": "%s",\n' "$(json_escape "$created_date")" >> "$json_path"
   printf '  "markdown_path": "%s",\n' "$(json_escape "$markdown_path")" >> "$json_path"
   printf '  "required_docs": ' >> "$json_path"
-  append_array_json "$(project_doc_path architecture)" "$(project_doc_path development)" "$(project_doc_path testing)" >> "$json_path"
+  append_array_json "$(project_doc_path core-beliefs)" "$(project_doc_path architecture)" "$(project_doc_path development)" "$(project_doc_path testing)" >> "$json_path"
   printf ',\n' >> "$json_path"
   printf '  "required_checks": ' >> "$json_path"
   append_array_json "validate-spec" "check-doc-impact" "lint-architecture" >> "$json_path"
@@ -251,7 +251,7 @@ output_report() {
   printf '"agent":"%s",' "$(json_escape "$AGENT")"
   printf '"dry_run":%s,' "$( [ "$DRY_RUN" -eq 1 ] && printf 'true' || printf 'false' )"
   printf '"references":'
-  append_array_json "$(project_doc_path architecture)" "$(project_doc_path development)" "$(project_doc_path testing)"
+  append_array_json "$(project_doc_path architecture)" "$(project_doc_path core-beliefs)" "$(project_doc_path development)" "$(project_doc_path testing)"
   printf '}\n'
 }
 

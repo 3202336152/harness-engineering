@@ -2,6 +2,7 @@
   "version": "1.0.0",
   "always_include": [
     "AGENTS.md",
+    "docs/project/核心信念.md",
     "docs/project/项目架构.md",
     "docs/project/开发规范.md",
     "docs/project/测试策略.md"

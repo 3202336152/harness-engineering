@@ -96,8 +96,11 @@ interfaces (controller/rpc/listener/job)
 记录团队与代理都必须遵守的依赖流向。
 
 ```text
-Types -> Config -> Repo -> Service -> Runtime -> UI
+interfaces -> application -> domain
+infrastructure -> domain
 ```
+
+如果项目不是 Java DDD 分层，也应把真实依赖流向同步写入 `.harness/architecture.json`，并确保文档说明与机械化校验配置一致。
 
 ## 核心链路与时序
 

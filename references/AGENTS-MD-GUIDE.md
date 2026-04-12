@@ -24,7 +24,7 @@ dump every rule in the project.
 
 ## Good Example
 
-- “Review `docs/design-docs/core-beliefs.md` before changing core infra.”
+- “Review `docs/project/核心信念.md` before changing core infra.”
 - “Run `npm test` and update docs before merging.”
 
 ## Bad Example

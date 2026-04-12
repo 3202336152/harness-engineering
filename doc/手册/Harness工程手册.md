@@ -54,10 +54,10 @@ project-root/
 │   ├── RELIABILITY.md           # 可靠性标准、失败模式、SLA
 │   ├── FRONTEND.md              # 前端架构和组件规范（如适用）
 │   ├── BACKEND.md               # 后端架构和 API 规范（如适用）
-│   ├── design-docs/             # 已验证的架构决策文档
-│   │   ├── core-beliefs.md      # 核心设计信念（不可轻易变更）
-│   │   ├── auth-system.md       # 认证系统设计
-│   │   └── data-model.md        # 数据模型设计
+│   ├── project/                 # 项目级共享规范
+│   │   ├── 核心信念.md           # 不可轻易变更的核心设计信念
+│   │   ├── 项目架构.md           # 项目架构基线
+│   │   └── 开发规范.md           # 开发与评审约束
 │   ├── exec-plans/              # 执行计划（一等公民）
 │   │   ├── active/              # 当前进行中的计划
 │   │   ├── completed/           # 已完成的计划
@@ -97,23 +97,24 @@ npm run build        # 构建项目
 
 [2-3句话描述核心架构模式]
 
-详细架构: docs/ARCHITECTURE.md
+详细架构: docs/project/项目架构.md
 
 ### 分层模型
 
 每个业务领域遵循严格的分层依赖:
 
 ```
-Types -> Config -> Repo -> Service -> Runtime -> UI
+默认 generic: Types -> Config -> Repo -> Service -> Runtime -> UI
+Java profile: Interfaces -> Application -> Domain; Infrastructure -> Domain
 ```
 
-依赖只能从左到右流动。跨切面关注点通过 Providers 注入。
+依赖必须遵循 `.harness/architecture.json` 中声明的分层方向。跨切面关注点通过 Providers 或防腐层注入。
 违反此规则的代码将被 CI 拒绝。
 
 ## 关键约束
 
-1. 修改核心基础设施前必须审查 docs/design-docs/core-beliefs.md
-2. 所有变更必须通过 docs/TESTING.md 中定义的自动化验收场景
+1. 修改核心基础设施前必须审查 docs/project/核心信念.md
+2. 所有变更必须通过 docs/project/测试策略.md 中定义的自动化验收场景
 3. 合并 PR 前必须更新 docs/ 中的相关文档
 4. 数据在系统边界处验证，内部代码互相信任
 5. 优先使用共享工具包，避免重复造轮子
@@ -122,11 +123,11 @@ Types -> Config -> Repo -> Service -> Runtime -> UI
 
 | 主题 | 文件 | 用途 |
 |------|------|------|
-| 架构 | docs/ARCHITECTURE.md | 领域划分和包层次 |
-| 规范 | docs/CONVENTIONS.md | 命名、格式、代码风格 |
-| 安全 | docs/SECURITY.md | 认证、权限、敏感数据 |
-| 测试 | docs/TESTING.md | 测试策略和命令 |
-| 设计决策 | docs/design-docs/ | 已验证的架构决策 |
+| 架构 | docs/project/项目架构.md | 领域划分和包层次 |
+| 规范 | docs/project/开发规范.md | 命名、格式、代码风格 |
+| 安全 | docs/project/安全规范.md | 认证、权限、敏感数据 |
+| 测试 | docs/project/测试策略.md | 测试策略和命令 |
+| 设计决策 | docs/project/核心信念.md / docs/decisions/ | 核心设计信念与补充决策 |
 | 执行计划 | docs/exec-plans/ | 当前和已完成的计划 |
 | 产品需求 | docs/product-specs/ | 功能需求和用户流程 |
 
@@ -208,7 +209,7 @@ done
 if [ $ERRORS -gt 0 ]; then
   echo ""
   echo "Found $ERRORS architecture boundary violation(s)."
-  echo "See docs/ARCHITECTURE.md for the layered dependency model."
+  echo "See docs/project/项目架构.md for the layered dependency model."
   exit 1
 fi
 
@@ -268,7 +269,7 @@ ERROR: types/ layer must not import from service/.
   Violation: src/user/types/user-dto.ts imports from src/user/service/user-service.ts
 
 FIX: Move the shared interface to src/user/types/ and have both layers reference it.
-See: docs/ARCHITECTURE.md#layered-model for the dependency flow diagram.
+See: docs/project/项目架构.md#分层与包结构 for the dependency flow diagram.
 ```
 
 Agent 读到这个错误后可以自行修复，无需人工干预。
@@ -293,12 +294,12 @@ AGENTS.md 中的每一个 token 都在与任务本身争夺注意力。遵循以
 
 所有影响 Agent 行为的知识必须从以下位置迁移到仓库:
 
-- [ ] Slack/飞书消息中的架构决策 -> `docs/design-docs/`
+- [ ] Slack/飞书消息中的架构决策 -> `docs/project/核心信念.md` / `docs/decisions/`
 - [ ] Google Docs/Notion 中的产品需求 -> `docs/product-specs/`
-- [ ] 团队成员脑中的隐性知识 -> `docs/CONVENTIONS.md`
+- [ ] 团队成员脑中的隐性知识 -> `docs/project/开发规范.md`
 - [ ] 外部库文档 -> `docs/references/`（重格式化为 LLM 友好格式）
-- [ ] 会议纪要中的决策 -> `docs/design-docs/`
-- [ ] CI/CD 配置的理由 -> `docs/ARCHITECTURE.md`
+- [ ] 会议纪要中的决策 -> `docs/project/核心信念.md` / `docs/decisions/`
+- [ ] CI/CD 配置的理由 -> `docs/project/项目架构.md`
 
 ### 3.3 分层上下文模型
 
@@ -428,7 +429,7 @@ AI 生成的代码会以不同于人类代码的方式积累"技术债":
 
 ### 5.2 黄金原则（编入仓库，机械执行）
 
-在 `docs/CONVENTIONS.md` 中定义并在 CI 中强制执行:
+在 `docs/project/开发规范.md` 中定义并在 CI 中强制执行:
 
 ```markdown
 ## 黄金原则
@@ -515,7 +516,7 @@ echo "All documentation is fresh."
 [明确描述要实现什么，用用户故事或功能描述]
 
 ### 约束
-- 遵循 docs/ARCHITECTURE.md 的分层模型
+- 遵循 docs/project/项目架构.md 的分层模型
 - 不修改 src/shared/ 中的公共接口
 - 使用现有的 [具体组件/工具] 而非新建
 - 性能要求: [具体数字]
@@ -760,8 +761,8 @@ npm run coverage -- --json | jq '.total.lines.pct'
 **立即可做:**
 
 - [ ] 创建 `AGENTS.md`（使用本文档模板，<100行）
-- [ ] 创建 `docs/ARCHITECTURE.md`（描述当前架构）
-- [ ] 创建 `docs/CONVENTIONS.md`（编码规范）
+- [ ] 创建 `docs/project/项目架构.md`（描述当前架构）
+- [ ] 创建 `docs/project/开发规范.md`（编码规范）
 - [ ] 确保 `npm test` / `npm run lint` / `npm run typecheck` 可用
 - [ ] 配置 pre-commit hook（lint + format）
 - [ ] 创建 PR 模板
@@ -777,7 +778,7 @@ npm run coverage -- --json | jq '.total.lines.pct'
 - [ ] 错误消息附带修复指引
 - [ ] 将团队知识从 Slack/Docs 迁移到仓库
 - [ ] 建立结构化日志格式
-- [ ] 创建 `docs/design-docs/core-beliefs.md`
+- [ ] 创建 `docs/project/核心信念.md`
 - [ ] 配置 CI 流水线运行所有 Harness 检查
 
 **效果:** Agent 的架构违规被自动拦截，代码一致性显著提升。
@@ -885,7 +886,7 @@ set -euo pipefail
 echo "Initializing Harness Engineering structure..."
 
 # 创建文档目录
-mkdir -p docs/{design-docs,exec-plans/{active,completed,tech-debt},product-specs,references,generated}
+mkdir -p docs/{project,features,exec-plans/{active,completed,tech-debt},product-specs,references,generated}
 mkdir -p scripts
 
 # 创建 AGENTS.md 骨架
@@ -909,7 +910,7 @@ npm run typecheck    # 类型检查
 
 [描述核心架构]
 
-详细文档: docs/ARCHITECTURE.md
+详细文档: docs/project/项目架构.md
 
 ## 关键约束
 
@@ -919,11 +920,11 @@ npm run typecheck    # 类型检查
 
 ## 文档导航
 
-- 架构: docs/ARCHITECTURE.md
-- 规范: docs/CONVENTIONS.md
-- 测试: docs/TESTING.md
-- 安全: docs/SECURITY.md
-- 设计决策: docs/design-docs/
+- 架构: docs/project/项目架构.md
+- 规范: docs/project/开发规范.md
+- 测试: docs/project/测试策略.md
+- 安全: docs/project/安全规范.md
+- 设计决策: docs/project/核心信念.md
 AGENTSEOF
 echo "Created AGENTS.md"
 fi
@@ -940,18 +941,20 @@ if [ ! -f .cursorrules ]; then
 fi
 
 # 创建文档骨架
-for doc in ARCHITECTURE CONVENTIONS TESTING SECURITY; do
-  if [ ! -f "docs/$doc.md" ]; then
-    echo "# $doc" > "docs/$doc.md"
-    echo "" >> "docs/$doc.md"
-    echo "TODO: Fill in $doc documentation." >> "docs/$doc.md"
-    echo "Created docs/$doc.md"
+mkdir -p docs/project
+for doc in 项目架构 开发规范 测试策略 安全规范; do
+  if [ ! -f "docs/project/$doc.md" ]; then
+    echo "# $doc" > "docs/project/$doc.md"
+    echo "" >> "docs/project/$doc.md"
+    echo "TODO: Fill in $doc documentation." >> "docs/project/$doc.md"
+    echo "Created docs/project/$doc.md"
   fi
 done
 
 # 创建核心信念文档
-if [ ! -f docs/design-docs/core-beliefs.md ]; then
-cat > docs/design-docs/core-beliefs.md << 'EOF'
+if [ ! -f docs/project/核心信念.md ]; then
+mkdir -p docs/project
+cat > docs/project/核心信念.md << 'EOF'
 # Core Beliefs
 
 These are fundamental design decisions that should not be changed without team consensus.
@@ -965,7 +968,7 @@ These are fundamental design decisions that should not be changed without team c
 ## Quality Standards
 - [Document your quality requirements here]
 EOF
-echo "Created docs/design-docs/core-beliefs.md"
+echo "Created docs/project/核心信念.md"
 fi
 
 # 创建 PR 模板
@@ -993,8 +996,8 @@ echo "Harness structure initialized."
 echo ""
 echo "Next steps:"
 echo "  1. Edit AGENTS.md with your project-specific information"
-echo "  2. Fill in docs/ARCHITECTURE.md with your system design"
-echo "  3. Fill in docs/CONVENTIONS.md with your coding standards"
+echo "  2. Fill in docs/project/项目架构.md with your system design"
+echo "  3. Fill in docs/project/开发规范.md with your coding standards"
 echo "  4. Add architecture linting to your CI pipeline"
 echo "  5. Keep CLAUDE.md and .cursorrules synced with AGENTS.md"
 ```

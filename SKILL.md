@@ -63,8 +63,8 @@ Execution flow:
 2. Detect the stack from `package.json`, `pyproject.toml`, `go.mod`, or
    `Cargo.toml`.
 3. Create the standard `docs/project/`, `docs/features/`,
-   `docs/design-docs/`, `docs/exec-plans/{active,completed,tech-debt}/`,
-   `docs/product-specs/`, `docs/references/`, and `.github/` directories.
+   `docs/exec-plans/{active,completed,tech-debt}/`, `docs/product-specs/`,
+   `docs/references/`, and `.github/` directories.
 4. Render compatibility docs plus project-level spec templates from `assets/templates/`.
 5. Create `.harness/architecture.json`, `.harness/spec-policy.json`, `.harness/doc-impact-rules.json`, `.harness/context-policy.json`, `.harness/run-policy.json`, and `.harness/observability-policy.json`.
 6. Create `.harness/runtime/task-memory.json`, `.harness/runtime/progress.md`, `.harness/evidence/`, and `.harness/metrics/`.
@@ -215,6 +215,7 @@ Current boundary:
 
 Project-level specs live under `docs/project/` and act as shared project truth:
 
+- `核心信念.md`
 - `项目架构.md`
 - `项目设计.md`
 - `接口规范.md`
@@ -267,14 +268,15 @@ Use `check-template-drift.sh` when the template pack has evolved and you need to
 Recommended dependency flow:
 
 ```text
-Types -> Config -> Repo -> Service -> Runtime -> UI
+Generic profile: Types -> Config -> Repo -> Service -> Runtime -> UI
+Java profiles: Interfaces -> Application -> Domain; Infrastructure -> Domain
 ```
 
 Rules:
 
-- Dependencies flow left to right only.
+- Dependencies follow the active `.harness/architecture.json` profile.
 - Same-layer imports should be avoided.
-- Cross-domain communication should go through provider interfaces.
+- Cross-domain communication should go through provider interfaces or the configured anti-corruption boundary.
 - CI should enforce the important boundaries mechanically.
 
 ## Context Engineering Quick Reference

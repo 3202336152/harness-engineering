@@ -21,8 +21,8 @@ Every implementation task should have:
 Allow users to search results by name.
 
 ## Constraints
-- Follow docs/project/ARCHITECTURE.md
-- Follow docs/project/DEVELOPMENT.md
+- Follow docs/project/项目架构.md
+- Follow docs/project/开发规范.md
 - Reuse existing services
 - Keep docs, tests, and feature specs updated
 

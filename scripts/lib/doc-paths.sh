@@ -97,6 +97,7 @@ project_doc_id_from_path() {
 
 project_template_file_for_path() {
   case "$(project_doc_id_from_path "$1")" in
+    core-beliefs) printf 'project/CORE-BELIEFS.md.tpl' ;;
     architecture) printf 'project/ARCHITECTURE.md.tpl' ;;
     design) printf 'project/DESIGN.md.tpl' ;;
     api-spec) printf 'project/API-SPEC.md.tpl' ;;
@@ -189,6 +190,8 @@ first_existing_project_doc() {
       ;;
     core-beliefs)
       first_existing_doc_path \
+        "$(project_doc_path core-beliefs)" \
+        "docs/project/core-beliefs.md" \
         "$(design_doc_path core-beliefs)" \
         "docs/design-docs/core-beliefs.md"
       ;;

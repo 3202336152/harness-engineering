@@ -36,6 +36,93 @@ CREATED_FILES=()
 CREATED_DIRS=()
 SKIPPED_FILES=()
 
+architecture_layers_json() {
+  case "$TEMPLATE_PROFILE" in
+    java-backend-service|java-batch-job|java-adapter)
+      printf '["domain", "application", "infrastructure", "interfaces"]'
+      ;;
+    *)
+      printf '["types", "config", "repo", "service", "runtime", "ui"]'
+      ;;
+  esac
+}
+
+architecture_layer_direction() {
+  case "$TEMPLATE_PROFILE" in
+    java-backend-service|java-batch-job|java-adapter)
+      printf 'interfaces -> application -> domain; infrastructure -> domain'
+      ;;
+    *)
+      printf 'left-to-right'
+      ;;
+  esac
+}
+
+architecture_src_root() {
+  case "$TEMPLATE_PROFILE" in
+    java-backend-service|java-batch-job|java-adapter)
+      if [ "$STACK" = "java-maven" ] || [ "$STACK" = "java-gradle" ]; then
+        printf 'src/main/java'
+      else
+        printf 'src'
+      fi
+      ;;
+    *)
+      printf 'src'
+      ;;
+  esac
+}
+
+architecture_package_conventions_json() {
+  case "$TEMPLATE_PROFILE" in
+    java-backend-service|java-batch-job|java-adapter)
+      cat <<'EOF'
+{
+    "domain": "domain层：Entity、ValueObject、DomainService、Repository接口、DomainEvent",
+    "application": "application层：ApplicationService、Command/Query、DTO、Assembler、事务边界",
+    "infrastructure": "infrastructure层：RepositoryImpl、MQ Producer/Consumer、Cache、External HTTP Client、Mapper",
+    "interfaces": "interfaces层：Controller、RPC Facade、Job、Listener、VO/Request/Response"
+  }
+EOF
+      ;;
+    *)
+      printf '{}'
+      ;;
+  esac
+}
+
+architecture_cross_domain_via() {
+  case "$TEMPLATE_PROFILE" in
+    java-backend-service|java-batch-job|java-adapter)
+      printf 'anti-corruption-layer'
+      ;;
+    *)
+      printf 'providers'
+      ;;
+  esac
+}
+
+architecture_forbidden_dependencies_json() {
+  case "$TEMPLATE_PROFILE" in
+    java-backend-service|java-batch-job|java-adapter)
+      cat <<'EOF'
+[
+    "domain -> infrastructure",
+    "domain -> interfaces",
+    "domain -> application",
+    "application -> interfaces",
+    "application -> infrastructure",
+    "infrastructure -> interfaces",
+    "infrastructure -> application"
+  ]
+EOF
+      ;;
+    *)
+      printf '[]'
+      ;;
+  esac
+}
+
 append_array_json() {
   local first=1
   local item
@@ -260,7 +347,6 @@ create_directories() {
     docs/project \
     docs/features \
     docs/decisions \
-    docs/design-docs \
     docs/exec-plans/active \
     docs/exec-plans/completed \
     docs/exec-plans/tech-debt \
@@ -336,6 +422,12 @@ render_content() {
   content="${content//'{{TEMPLATE_LANGUAGE}}'/$TEMPLATE_LANGUAGE}"
   content="${content//'{{PROFILE_DESCRIPTION}}'/$PROFILE_DESCRIPTION}"
   content="${content//'{{HARNESS_SKILL_ROOT}}'/$VENDORED_SKILL_ROOT}"
+  content="${content//'{{ARCHITECTURE_LAYERS_JSON}}'/$(architecture_layers_json)}"
+  content="${content//'{{ARCHITECTURE_LAYER_DIRECTION}}'/$(architecture_layer_direction)}"
+  content="${content//'{{ARCHITECTURE_SRC_ROOT}}'/$(architecture_src_root)}"
+  content="${content//'{{ARCHITECTURE_PACKAGE_CONVENTIONS_JSON}}'/$(architecture_package_conventions_json)}"
+  content="${content//'{{ARCHITECTURE_CROSS_DOMAIN_VIA}}'/$(architecture_cross_domain_via)}"
+  content="${content//'{{ARCHITECTURE_FORBIDDEN_DEPENDENCIES_JSON}}'/$(architecture_forbidden_dependencies_json)}"
 
   printf '%s' "$content"
 }
@@ -383,6 +475,18 @@ render_support_template() {
 
   content="$(render_content "$(cat "$source_file")")"
   write_rendered_file "$target_file" "$content"
+}
+
+render_entry_documents() {
+  local agents_template=""
+
+  render_template "CLAUDE.md.tpl" "CLAUDE.md"
+
+  if agents_template="$(resolve_template_file "AGENTS.md.tpl" 2>/dev/null)"; then
+    render_template "AGENTS.md.tpl" "AGENTS.md"
+  else
+    render_template "CLAUDE.md.tpl" "AGENTS.md"
+  fi
 }
 
 runtime_bundle_copy_paths() {
@@ -514,12 +618,8 @@ generate_guardrails() {
 }
 
 generate_files() {
-  render_template "AGENTS.md.tpl" "AGENTS.md"
-  render_template "CLAUDE.md.tpl" "CLAUDE.md"
-  render_template "ARCHITECTURE.md.tpl" "$(project_index_doc_path architecture-index)"
-  render_template "CONVENTIONS.md.tpl" "$(project_index_doc_path conventions-index)"
-  render_template "TESTING.md.tpl" "$(project_index_doc_path testing-index)"
-  render_template "SECURITY.md.tpl" "$(project_index_doc_path security-index)"
+  render_entry_documents
+  render_template "project/CORE-BELIEFS.md.tpl" "$(project_doc_path core-beliefs)"
   render_template "project/ARCHITECTURE.md.tpl" "$(project_doc_path architecture)"
   render_template "project/DESIGN.md.tpl" "$(project_doc_path design)"
   render_template "project/API-SPEC.md.tpl" "$(project_doc_path api-spec)"
@@ -530,7 +630,6 @@ generate_files() {
   render_template "project/OPERATIONS.md.tpl" "$(project_doc_path operations)"
   render_template "project/OBSERVABILITY.md.tpl" "$(project_doc_path observability)"
   render_template "PR_TEMPLATE.md.tpl" ".github/PULL_REQUEST_TEMPLATE.md"
-  render_template "core-beliefs.md.tpl" "$(design_doc_path core-beliefs)"
   render_template "architecture.json.tpl" ".harness/architecture.json"
   render_template "spec-policy.json.tpl" ".harness/spec-policy.json"
   render_template "doc-impact-rules.json.tpl" ".harness/doc-impact-rules.json"

@@ -15,6 +15,6 @@ Agents should operate with the least privilege necessary for the current task.
 
 ## Repository Guidance
 
-- document sensitive data handling in `docs/SECURITY.md`
+- document sensitive data handling in `docs/project/安全规范.md`
 - use CODEOWNERS for critical areas where appropriate
 - keep rollback instructions easy to find

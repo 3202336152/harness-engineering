@@ -469,7 +469,7 @@ fallback_restore_context_bundle_json() {
     lines="CLAUDE.md"
   fi
 
-  for doc_id in architecture development testing security requirements operations observability; do
+  for doc_id in core-beliefs architecture development testing security requirements operations observability; do
     path="$(first_existing_project_doc "$doc_id" || true)"
     lines="$(append_restore_path_line "$lines" "$path")"
   done

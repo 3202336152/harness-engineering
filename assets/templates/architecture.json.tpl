@@ -1,7 +1,9 @@
 {
-  "layers": ["types", "config", "repo", "service", "runtime", "ui"],
-  "layer_direction": "left-to-right",
-  "src_root": "src",
-  "cross_domain_allowed_via": "providers",
+  "layers": {{ARCHITECTURE_LAYERS_JSON}},
+  "layer_direction": "{{ARCHITECTURE_LAYER_DIRECTION}}",
+  "src_root": "{{ARCHITECTURE_SRC_ROOT}}",
+  "package_conventions": {{ARCHITECTURE_PACKAGE_CONVENTIONS_JSON}},
+  "cross_domain_allowed_via": "{{ARCHITECTURE_CROSS_DOMAIN_VIA}}",
+  "forbidden_dependencies": {{ARCHITECTURE_FORBIDDEN_DEPENDENCIES_JSON}},
   "custom_rules": []
 }

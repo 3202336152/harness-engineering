@@ -60,6 +60,29 @@ layer_index() {
   printf '%s' "-1"
 }
 
+dependency_forbidden() {
+  local current_layer="$1"
+  local target_layer="$2"
+  local rule
+  local normalized
+  local source
+  local target
+
+  while IFS= read -r rule; do
+    [ -n "$rule" ] || continue
+    normalized="$(printf '%s' "$rule" | tr '→' '-' | sed 's/[[:space:]]*-[[:space:]]*>[[:space:]]*/->/g')"
+    source="${normalized%%->*}"
+    target="${normalized##*->}"
+    if [ "$source" = "$current_layer" ] && [ "$target" = "$target_layer" ]; then
+      return 0
+    fi
+  done <<EOF
+$FORBIDDEN_DEPENDENCIES
+EOF
+
+  return 1
+}
+
 path_layer() {
   local path="$1"
   local layer
@@ -92,6 +115,7 @@ $file|$line|$current_layer|$target_layer|$import_path|$message|$fix"
 
 check_file() {
   local file="$1"
+  local relative_file
   local domain
   local current_layer
   local import_line
@@ -101,8 +125,9 @@ check_file() {
   local current_index
   local target_index
 
-  domain="$(printf '%s' "$file" | cut -d/ -f2)"
-  current_layer="$(printf '%s' "$file" | cut -d/ -f3)"
+  relative_file="${file#"$SRC_ROOT_PREFIX"}"
+  domain="${relative_file%%/*}"
+  current_layer="$(printf '%s' "$relative_file" | cut -d/ -f2)"
   current_index="$(layer_index "$current_layer")"
   if [ "$current_index" -lt 0 ]; then
     return
@@ -114,6 +139,18 @@ check_file() {
     import_path="${import_line#*|}"
     target_layer="$(path_layer "$import_path")"
     if [ -z "$target_layer" ]; then
+      continue
+    fi
+
+    if dependency_forbidden "$current_layer" "$target_layer"; then
+      record_violation \
+        "$file" \
+        "$line_number" \
+        "$current_layer" \
+        "$target_layer" \
+        "$import_path" \
+        "Forbidden dependency: $current_layer must not import $target_layer" \
+        "Move the dependency to an allowed layer or introduce a domain-facing contract."
       continue
     fi
 
@@ -223,7 +260,9 @@ main() {
   LAYERS="$(jq -r '.layers[]?' "$CONFIG_PATH")"
   src_root="$(jq -r '.src_root // "src"' "$CONFIG_PATH")"
   PROVIDERS_DIR="$(jq -r '.cross_domain_allowed_via // "providers"' "$CONFIG_PATH")"
+  FORBIDDEN_DEPENDENCIES="$(jq -r '.forbidden_dependencies[]? // empty' "$CONFIG_PATH")"
   VIOLATIONS=""
+  SRC_ROOT_PREFIX="${src_root%/}/"
 
   if [ ! -d "$src_root" ]; then
     printf '{"status":"passed","config":"%s","violations":[]}\n' "$(json_escape "$CONFIG_PATH")"

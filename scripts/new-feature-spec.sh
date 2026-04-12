@@ -229,6 +229,7 @@ EOF
 load_related_project_docs() {
   local change_type
 
+  append_related_project_doc "$(project_doc_path core-beliefs)"
   append_related_project_doc "$(project_doc_path architecture)"
   append_related_project_doc "$(project_doc_path requirements)"
   append_related_project_doc "$(project_doc_path testing)"

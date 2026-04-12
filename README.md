@@ -57,6 +57,7 @@ npx skills add 3202336152/harness-engineering
 - `doc/` 下的维护文档统一使用中文文件名
 - 项目级与功能级 spec 模板默认生成中文内容和中文 `md` 文件名，便于团队查看、评审和检索
 - 默认生成的文件示例：
+  - `docs/project/核心信念.md`
   - `docs/project/项目架构.md`
   - `docs/project/开发规范.md`
   - `docs/project/运行基线.md`

@@ -129,7 +129,7 @@ template_language: {{TEMPLATE_LANGUAGE}}
 
 ## 设计决策记录
 
-将重要决策关联到 `docs/decisions/` 或 `docs/design-docs/`，并说明：
+将重要决策关联到 `docs/project/核心信念.md` 或 `docs/decisions/`，并说明：
 
 - 决策背景
 - 可选方案
