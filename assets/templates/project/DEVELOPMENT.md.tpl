@@ -14,7 +14,7 @@ template_language: {{TEMPLATE_LANGUAGE}}
 
 ## 适用范围
 
-本文描述日常开发、联调、评审、发布前准备的统一约定，特别适用于 Java 后端项目。
+本文描述日常开发、联调、评审、发布前准备的统一约定，适用于后端服务、批处理任务和复杂业务链路。Java 项目可直接按本模板落地，其他技术栈可按等价职责映射填写。
 
 ## 当前模板画像
 
@@ -28,14 +28,14 @@ template_language: {{TEMPLATE_LANGUAGE}}
 {{STACK_COMMANDS}}
 ```
 
-## Java 开发约定
+## 技术栈开发约定
 
-- 统一 JDK 版本、字符集、时区和代码格式化规则。
-- 明确使用 Maven/Gradle、Lombok、MapStruct、MyBatis/JPA、Spotless/Checkstyle/PMD 的要求。
-- 新模块默认遵循 `interfaces -> application -> domain -> infrastructure` 的分层思路。
-- Spring Boot 项目建议使用根包 + 启动类统一扫描，避免默认包和跨仓扫描。
+- 统一语言/运行时版本、字符集、时区、代码格式化和静态检查规则。
+- 明确构建工具、包管理、序列化方案、ORM/DAO、lint/format/test 工具链的使用要求。
+- 如果是 Java 服务，建议补充 JDK、Spring Boot、Maven/Gradle、Lombok、MapStruct、MyBatis/JPA 的具体约定。
+- 新模块默认先定义入口层、用例编排层、核心规则层、基础设施适配层的职责，再开始编码。
 - 入口层默认只做协议转换、参数校验、鉴权上下文接入和日志打点。
-- 复杂链路优先写清楚编排服务、规则服务、Mapper/Client 的职责后再开始编码。
+- 复杂链路优先写清楚 orchestration service、rule service、repository/client、converter 的职责后再开始编码。
 
 ## 工程与目录组织
 
@@ -54,7 +54,7 @@ template_language: {{TEMPLATE_LANGUAGE}}
 
 ## 新增功能最小落地清单
 
-每个复杂 Java 需求默认至少补齐：
+每个复杂需求默认至少补齐：
 
 1. 功能文档：背景、方案、接口/数据、测试、发布回滚。
 2. 入口代码：`controller/listener/job` 与参数校验。
@@ -100,7 +100,14 @@ template_language: {{TEMPLATE_LANGUAGE}}
 - 记录分支、评审和合并流程要求。
 - 说明哪些类型的改动必须附设计文档、接口文档、数据库文档或测试证据。
 - 说明本地钩子、PR 模板、CI 门禁是否启用 `check-doc-impact`。
-- 说明需要重点检查的 Java 常见问题：长事务、循环依赖、空指针、N+1、反序列化风险、并发覆盖写等。
+- 说明需要重点检查的常见工程问题；对于 Java 项目，尤其关注长事务、循环依赖、空指针、N+1、反序列化风险、并发覆盖写等。
+
+## 分支与提交规范
+
+- 统一分支命名规则，例如 `feature/<id>-<slug>`、`fix/<id>-<slug>`、`chore/<scope>`。
+- 提交粒度保持单一意图，避免把功能、重构、格式化、批量替换混在同一提交中。
+- 提交前至少运行团队约定的测试、`check-doc-impact`、`validate-spec.sh --json` 等基础校验。
+- PR 或合并请求中应关联需求或 feature id，并说明变更范围、验证方式、回滚点和文档同步情况。
 
 ## 明确禁止事项
 

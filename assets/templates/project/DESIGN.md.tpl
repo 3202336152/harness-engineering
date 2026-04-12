@@ -14,7 +14,7 @@ template_language: {{TEMPLATE_LANGUAGE}}
 
 ## 设计目标
 
-总结该项目在长期演进中要持续守住的目标。对复杂 Java 服务，设计目标不应停留在“分层清晰”，而应明确哪些规则必须收口、哪些链路必须可回放、哪些异常必须可恢复，例如：
+总结该项目在长期演进中要持续守住的目标。对复杂后端服务，设计目标不应停留在“分层清晰”，而应明确哪些规则必须收口、哪些链路必须可回放、哪些异常必须可恢复，例如：
 
 - 业务规则集中而不是分散在 Controller/Job/Listener 中
 - 技术实现可替换，核心领域规则尽量稳定
@@ -29,19 +29,19 @@ template_language: {{TEMPLATE_LANGUAGE}}
 - 哪些地方已经收口良好，哪些地方仍存在职责混杂
 - 哪些设计是当前已实现，哪些只是目标态
 
-## Java 分层设计约定
+## 分层设计约定
 
 建议说明以下内容：
 
-- `controller / rpc / listener / job` 是否统一归入接口层
-- `application service` 与 `domain service` 的职责划分
-- `repository`、`mapper`、`dao`、`gateway` 的命名和定位
-- `config`、`starter`、`support`、`common` 包的进入门槛
-- 多模块项目如何拆分 parent/module/api/core/adapter
+- `controller / rpc / listener / job` 等入口是否统一归入接口层
+- `application service / use case` 与 `domain service` 的职责划分
+- `repository`、`mapper`、`dao`、`gateway`、`adapter` 的命名和定位
+- `config`、`starter`、`support`、`common` 包或模块的进入门槛
+- 单仓分包、多模块工程、微服务拆分时如何划定 parent/module/api/core/adapter 边界
 
 建议补充：
 
-- 启动类、配置类、自动装配类、定时任务类的放置规则
+- 对 Java/Spring 项目，补充启动类、配置类、自动装配类、定时任务类的放置规则
 - 面向 HTTP、MQ、批处理三类入口时，各自的层次边界
 - 单模块分包与多模块拆分的判定标准
 

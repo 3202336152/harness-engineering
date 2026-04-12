@@ -55,4 +55,36 @@ assert_json_field "$output" ".checks.doc_impact.status" "passed"
 assert_json_field "$output" ".checks.rollback_readiness.status" "passed"
 teardown_test_dir
 
+it "restore stage reconstructs recent task state and context"
+setup_test_dir
+init_git_repo
+bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
+bash "$REPO_ROOT/scripts/new-feature-spec.sh" --id FEAT-013 --title "Order Query" --owner alice --change-types api >/dev/null 2>&1
+output=$(bash "$REPO_ROOT/scripts/harness-exec.sh" verify --feature-id FEAT-013 --json 2>&1)
+status=$?
+assert_success "$status" "verify stage succeeds before restore"
+restore_output=$(bash "$REPO_ROOT/scripts/harness-exec.sh" restore --feature-id FEAT-013 --json 2>&1)
+restore_status=$?
+assert_success "$restore_status" "restore stage succeeds"
+assert_json_field "$restore_output" ".status" "restored"
+assert_json_field "$restore_output" ".session_restored" "true"
+assert_json_field "$restore_output" ".last_feature_id" "FEAT-013"
+assert_json_field "$restore_output" ".last_mode" "verify"
+assert_json_field "$restore_output" ".feature_spec_exists" "true"
+assert_json_field "$restore_output" '.pending_steps | length' "5"
+assert_json_field "$restore_output" '.context_bundle | index("docs/project/项目架构.md") != null' "true"
+assert_json_field "$restore_output" '.context_bundle | index("docs/features/FEAT-013-order-query/功能概览.md") != null' "true"
+teardown_test_dir
+
+it "restore stage reports an empty session when no runtime history exists"
+setup_test_dir
+init_git_repo
+bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
+restore_output=$(bash "$REPO_ROOT/scripts/harness-exec.sh" restore --json 2>&1)
+restore_status=$?
+assert_success "$restore_status" "restore stage succeeds without history"
+assert_json_field "$restore_output" ".status" "empty"
+assert_json_field "$restore_output" ".session_restored" "false"
+teardown_test_dir
+
 print_summary

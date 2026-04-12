@@ -41,6 +41,10 @@ json_escape() {
   printf '%s' "$text"
 }
 
+json_array_from_lines() {
+  printf '%s\n' "$1" | jq -Rn '[inputs | select(length > 0)]'
+}
+
 slugify() {
   local slug
   slug="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
@@ -99,6 +103,7 @@ Usage:
   harness-exec.sh verify [--feature-id <id>] [--strict] [--staged] [--json]
   harness-exec.sh autofix-safe [--json]
   harness-exec.sh run --task <description> [--feature-id <id>] [--title <title>] [--owner <name>] [--change-types <csv>] [--agent <name>] [--strict] [--staged] [--json]
+  harness-exec.sh restore [--feature-id <id>] [--json]
 EOF
 }
 
@@ -381,6 +386,314 @@ render_progress_report() {
       printf '暂无记录。\n'
     fi
   } > "$progress_path"
+}
+
+select_restore_task_json() {
+  local memory_path="$1"
+
+  if [ ! -f "$memory_path" ]; then
+    printf '{}'
+    return
+  fi
+
+  if [ -n "$FEATURE_ID" ]; then
+    jq -c --arg feature_id "$FEATURE_ID" \
+      '((.tasks // []) | map(select((.feature_id // "") == $feature_id)) | .[0]) // {}' \
+      "$memory_path" 2>/dev/null || printf '{}'
+  else
+    jq -c '(.tasks // [])[0] // {}' "$memory_path" 2>/dev/null || printf '{}'
+  fi
+}
+
+compact_text_file() {
+  local file="$1"
+  local max_lines="${2:-40}"
+
+  [ -f "$file" ] || return 0
+
+  awk -v max_lines="$max_lines" '
+    NR <= max_lines {
+      gsub(/[[:space:]]+/, " ")
+      sub(/^ /, "", $0)
+      sub(/ $/, "", $0)
+      if (length($0) > 0) {
+        printf "%s ", $0
+      }
+    }
+  ' "$file" | sed 's/^ *//; s/ *$//'
+}
+
+extract_pending_steps_json() {
+  local status_file="$1"
+
+  if [ ! -f "$status_file" ]; then
+    printf '[]'
+    return
+  fi
+
+  awk '
+    /^[[:space:]]*-[[:space:]]\[[[:space:]]\][[:space:]]+/ {
+      sub(/^[[:space:]]*-[[:space:]]\[[[:space:]]\][[:space:]]+/, "", $0)
+      print
+    }
+  ' "$status_file" | jq -Rn '[inputs | select(length > 0)]'
+}
+
+append_restore_path_line() {
+  local lines="$1"
+  local path="$2"
+
+  if [ -z "$path" ] || [ ! -f "$path" ]; then
+    printf '%s' "$lines"
+    return
+  fi
+
+  if [ -n "$lines" ] && printf '%s\n' "$lines" | grep -Fxq "$path"; then
+    printf '%s' "$lines"
+  elif [ -n "$lines" ]; then
+    printf '%s\n%s' "$lines" "$path"
+  else
+    printf '%s' "$path"
+  fi
+}
+
+fallback_restore_context_bundle_json() {
+  local feature_dir="$1"
+  local lines=""
+  local path=""
+  local doc_id=""
+
+  if [ -f AGENTS.md ]; then
+    lines="AGENTS.md"
+  elif [ -f CLAUDE.md ]; then
+    lines="CLAUDE.md"
+  fi
+
+  for doc_id in architecture development testing security requirements operations observability; do
+    path="$(first_existing_project_doc "$doc_id" || true)"
+    lines="$(append_restore_path_line "$lines" "$path")"
+  done
+
+  if [ -n "$feature_dir" ] && [ -d "$feature_dir" ]; then
+    lines="$(append_restore_path_line "$lines" "$feature_dir/manifest.json")"
+    for doc_id in overview design api-spec db-spec test-spec rollout status; do
+      path="$(first_existing_feature_doc "$feature_dir" "$doc_id" || true)"
+      lines="$(append_restore_path_line "$lines" "$path")"
+    done
+  fi
+
+  json_array_from_lines "$lines"
+}
+
+resolve_restore_context_json() {
+  local restore_task="$1"
+  local selected_feature_id="$2"
+  local context_status=0
+  local context_output=""
+  local context_cmd=()
+
+  if [ -z "$restore_task" ]; then
+    printf '{"required_context":[],"recommended_context":[],"verification_steps":[]}'
+    return
+  fi
+
+  context_cmd=(bash "$SCRIPT_DIR/resolve-task-context.sh" --task "$restore_task" --json)
+  if [ -n "$selected_feature_id" ]; then
+    context_cmd+=(--feature-id "$selected_feature_id")
+  fi
+
+  context_output="$(run_json_command context_status "${context_cmd[@]}")"
+  if [ "$context_status" -eq 0 ] && printf '%s' "$context_output" | jq -e '.status == "success"' >/dev/null 2>&1; then
+    printf '%s' "$context_output" | jq -c \
+      '{required_context:(.required_context // []),recommended_context:(.recommended_context // []),verification_steps:(.verification_steps // [])}'
+  else
+    printf '{"required_context":[],"recommended_context":[],"verification_steps":[]}'
+  fi
+}
+
+restore_stage() {
+  local selected_task_json='{}'
+  local selected_task=""
+  local selected_title=""
+  local selected_feature_id="$FEATURE_ID"
+  local selected_status=""
+  local selected_mode=""
+  local selected_run_id=""
+  local selected_updated_at=""
+  local selected_run_record_path=""
+  local selected_evidence_dir=""
+  local recent_tasks_json='[]'
+  local feature_dir=""
+  local status_doc_path=""
+  local pending_steps_json='[]'
+  local progress_summary=""
+  local context_json='{"required_context":[],"recommended_context":[],"verification_steps":[]}'
+  local context_bundle_json='[]'
+  local recommended_context_json='[]'
+  local verification_steps_json='[]'
+  local restore_task=""
+  local session_restored="false"
+  local feature_spec_exists="false"
+  local report_status="empty"
+  local task_memory_path_output=""
+  local progress_report_path_output=""
+
+  if [ -f "$TASK_MEMORY_PATH" ]; then
+    task_memory_path_output="$TASK_MEMORY_PATH"
+    recent_tasks_json="$(jq -c '(.tasks // [])[:5]' "$TASK_MEMORY_PATH" 2>/dev/null || printf '[]')"
+    selected_task_json="$(select_restore_task_json "$TASK_MEMORY_PATH")"
+  fi
+
+  if [ -f "$PROGRESS_REPORT_PATH" ]; then
+    progress_report_path_output="$PROGRESS_REPORT_PATH"
+    progress_summary="$(compact_text_file "$PROGRESS_REPORT_PATH" 40)"
+  fi
+
+  selected_task="$(printf '%s' "$selected_task_json" | jq -r '.task // ""' 2>/dev/null || printf '')"
+  selected_title="$(printf '%s' "$selected_task_json" | jq -r '.title // ""' 2>/dev/null || printf '')"
+  if [ -z "$selected_feature_id" ]; then
+    selected_feature_id="$(printf '%s' "$selected_task_json" | jq -r '.feature_id // ""' 2>/dev/null || printf '')"
+  fi
+  selected_status="$(printf '%s' "$selected_task_json" | jq -r '.status // ""' 2>/dev/null || printf '')"
+  selected_mode="$(printf '%s' "$selected_task_json" | jq -r '.mode // ""' 2>/dev/null || printf '')"
+  selected_run_id="$(printf '%s' "$selected_task_json" | jq -r '.last_run_id // ""' 2>/dev/null || printf '')"
+  selected_updated_at="$(printf '%s' "$selected_task_json" | jq -r '.updated_at // ""' 2>/dev/null || printf '')"
+  selected_run_record_path="$(printf '%s' "$selected_task_json" | jq -r '.run_record_path // ""' 2>/dev/null || printf '')"
+  selected_evidence_dir="$(printf '%s' "$selected_task_json" | jq -r '.evidence_dir // ""' 2>/dev/null || printf '')"
+
+  if [ -n "$selected_feature_id" ] && [ -d docs/features ]; then
+    feature_dir="$(find docs/features -mindepth 1 -maxdepth 1 -type d -name "$selected_feature_id-*" | sort | head -1)"
+  fi
+
+  if [ -n "$feature_dir" ]; then
+    feature_spec_exists="true"
+    status_doc_path="$(first_existing_feature_doc "$feature_dir" status || true)"
+    if [ -n "$status_doc_path" ]; then
+      pending_steps_json="$(extract_pending_steps_json "$status_doc_path")"
+    fi
+  fi
+
+  restore_task="$selected_task"
+  if [ -z "$restore_task" ]; then
+    restore_task="$selected_title"
+  fi
+  if [ -z "$restore_task" ]; then
+    restore_task="$selected_feature_id"
+  fi
+
+  context_json="$(resolve_restore_context_json "$restore_task" "$selected_feature_id")"
+  context_bundle_json="$(printf '%s' "$context_json" | jq -c '.required_context // []' 2>/dev/null || printf '[]')"
+  recommended_context_json="$(printf '%s' "$context_json" | jq -c '.recommended_context // []' 2>/dev/null || printf '[]')"
+  verification_steps_json="$(printf '%s' "$context_json" | jq -c '.verification_steps // []' 2>/dev/null || printf '[]')"
+
+  if [ "$context_bundle_json" = "[]" ]; then
+    context_bundle_json="$(fallback_restore_context_bundle_json "$feature_dir")"
+  fi
+
+  if [ -n "$selected_task" ] || [ -n "$selected_title" ] || [ -n "$selected_feature_id" ] || [ -n "$selected_status" ] || [ -n "$selected_run_id" ] || [ "$feature_spec_exists" = "true" ]; then
+    session_restored="true"
+    report_status="restored"
+  fi
+
+  if [ "$OUTPUT_JSON" -eq 1 ]; then
+    jq -n \
+      --arg status "$report_status" \
+      --argjson session_restored "$session_restored" \
+      --argjson feature_spec_exists "$feature_spec_exists" \
+      --arg task_memory_path "$task_memory_path_output" \
+      --arg progress_report_path "$progress_report_path_output" \
+      --arg last_task "$selected_task" \
+      --arg last_title "$selected_title" \
+      --arg last_feature_id "$selected_feature_id" \
+      --arg last_status "$selected_status" \
+      --arg last_mode "$selected_mode" \
+      --arg last_run_id "$selected_run_id" \
+      --arg updated_at "$selected_updated_at" \
+      --arg run_record_path "$selected_run_record_path" \
+      --arg evidence_dir "$selected_evidence_dir" \
+      --arg feature_dir "$feature_dir" \
+      --arg status_doc_path "$status_doc_path" \
+      --arg progress_summary "$progress_summary" \
+      --argjson pending_steps "$pending_steps_json" \
+      --argjson recent_tasks "$recent_tasks_json" \
+      --argjson context_bundle "$context_bundle_json" \
+      --argjson recommended_context "$recommended_context_json" \
+      --argjson verification_steps "$verification_steps_json" \
+      '
+      {
+        status: $status,
+        session_restored: $session_restored,
+        feature_spec_exists: $feature_spec_exists,
+        task_memory_path: (if $task_memory_path != "" then $task_memory_path else null end),
+        progress_report_path: (if $progress_report_path != "" then $progress_report_path else null end),
+        last_task: (if $last_task != "" then $last_task else null end),
+        last_title: (if $last_title != "" then $last_title else null end),
+        last_feature_id: (if $last_feature_id != "" then $last_feature_id else null end),
+        last_status: (if $last_status != "" then $last_status else null end),
+        last_mode: (if $last_mode != "" then $last_mode else null end),
+        last_run_id: (if $last_run_id != "" then $last_run_id else null end),
+        updated_at: (if $updated_at != "" then $updated_at else null end),
+        run_record_path: (if $run_record_path != "" then $run_record_path else null end),
+        evidence_dir: (if $evidence_dir != "" then $evidence_dir else null end),
+        feature_dir: (if $feature_dir != "" then $feature_dir else null end),
+        status_doc_path: (if $status_doc_path != "" then $status_doc_path else null end),
+        pending_steps: $pending_steps,
+        context_bundle: $context_bundle,
+        recommended_context: $recommended_context,
+        verification_steps: $verification_steps,
+        progress_summary: (if $progress_summary != "" then $progress_summary else null end),
+        recent_tasks: $recent_tasks
+      }
+      | with_entries(select(.value != null and .value != ""))
+      '
+  else
+    if [ "$report_status" = "empty" ]; then
+      printf 'No previous harness session was found.\n'
+      return 0
+    fi
+
+    printf '=== Harness Session Restore ===\n'
+    if [ -n "$selected_task" ]; then
+      printf 'Last task      : %s\n' "$selected_task"
+    fi
+    if [ -n "$selected_title" ]; then
+      printf 'Last title     : %s\n' "$selected_title"
+    fi
+    if [ -n "$selected_feature_id" ]; then
+      printf 'Feature ID     : %s\n' "$selected_feature_id"
+    fi
+    if [ -n "$selected_status" ]; then
+      printf 'Last status    : %s\n' "$selected_status"
+    fi
+    if [ -n "$selected_mode" ]; then
+      printf 'Last mode      : %s\n' "$selected_mode"
+    fi
+    if [ -n "$selected_run_id" ]; then
+      printf 'Last run ID    : %s\n' "$selected_run_id"
+    fi
+    if [ -n "$feature_dir" ]; then
+      printf 'Feature dir    : %s\n' "$feature_dir"
+    fi
+    printf 'Spec exists    : %s\n' "$feature_spec_exists"
+
+    if [ "$pending_steps_json" != "[]" ]; then
+      printf '\nPending steps:\n'
+      printf '%s\n' "$pending_steps_json" | jq -r '.[]' | while IFS= read -r step; do
+        printf '  - [ ] %s\n' "$step"
+      done
+    fi
+
+    if [ "$context_bundle_json" != "[]" ]; then
+      printf '\nRestore context:\n'
+      printf '%s\n' "$context_bundle_json" | jq -r '.[]' | while IFS= read -r path; do
+        printf '  %s\n' "$path"
+      done
+    fi
+
+    if [ -n "$progress_summary" ]; then
+      printf '\nProgress summary:\n%s\n' "$progress_summary"
+    fi
+  fi
 }
 
 finalize_with_runtime_artifacts() {
@@ -908,6 +1221,9 @@ main() {
         exit 1
       fi
       run_stage
+      ;;
+    restore)
+      restore_stage
       ;;
     *)
       usage

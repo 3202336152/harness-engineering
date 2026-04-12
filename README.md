@@ -36,6 +36,7 @@ npx skills add 3202336152/harness-engineering
 | `bash scripts/harness-exec.sh prepare --task "<任务>" --feature-id FEAT-001 --title "<标题>" --json` | 一次生成功能 spec、Markdown 执行计划、机器计划 JSON、上下文 bundle |
 | `bash scripts/harness-exec.sh verify --feature-id FEAT-001 --json` | 聚合校验，并落 run record、metrics ledger、task memory、progress、evidence |
 | `bash scripts/harness-exec.sh run --task "<任务>" --feature-id FEAT-001 --title "<标题>" --json` | 串联 `prepare -> verify -> autofix-safe -> reverify`，并按策略触发证据采集与 GC |
+| `bash scripts/harness-exec.sh restore --feature-id FEAT-001 --json` | 从 `.harness/runtime/` 恢复最近任务状态、待办检查项和推荐上下文 |
 
 ## 仓库内容
 
@@ -111,6 +112,7 @@ bash scripts/init-harness.sh --with-github-actions
 - 历史模板迁移：`migrate-template-docs.sh` 会先备份，再调用 safe autofix 迁移结构类模板差异
 - 反馈闭环：`harness-exec.sh verify/run` 会聚合校验结果，并把 run record、metrics、task memory、progress、evidence 一起落盘
 - 长周期记忆：`.harness/runtime/task-memory.json` 与 `.harness/runtime/progress.md` 会持续记录最近任务和运行状态
+- 会话恢复：`harness-exec.sh restore` 可以在上下文压缩或切换会话后重建最近任务摘要与必读上下文
 - 可观测性接入：`.harness/observability-policy.json` 可以按项目配置命令输出和文件证据采集
 - 回收治理：`harness-gc.sh` 会按 `.harness/run-policy.json` 的保留策略清理旧上下文、旧记录、旧证据
 

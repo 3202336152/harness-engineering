@@ -2,9 +2,11 @@
 name: harness-engineering
 description: >
   Scaffold, audit, and maintain AI coding agent work environments using
-  Harness Engineering principles. Use when a project needs AGENTS.md,
-  architecture constraints, harness maturity auditing, execution plans,
-  or general optimization for AI coding agents.
+  Harness Engineering principles. Use when the user wants to initialize
+  AGENTS.md or docs/ structure, audit harness maturity, generate execution
+  plans, validate specs, check doc impact or freshness, restore recent
+  task context from .harness/runtime, or prepare a project for AI coding
+  agent workflows.
 license: MIT
 compatibility: Requires bash and git. Works with any language or framework.
 metadata:
@@ -42,7 +44,7 @@ Supporting scripts extend the flow:
 - `scripts/check-doc-impact.sh` blocks code changes that should have updated specs or project docs.
 - `scripts/validate-spec.sh` validates project-level and feature-level spec completeness.
 - `scripts/check-rollback-readiness.sh` checks whether rollout-heavy features have rollback docs ready.
-- `scripts/harness-exec.sh` orchestrates `prepare`, `verify`, and `run` stages for a baseline autonomous loop.
+- `scripts/harness-exec.sh` orchestrates `prepare`, `verify`, `run`, and `restore` stages for a baseline autonomous loop.
 - `scripts/prepare-template-overrides.sh` exports built-in templates into a writable override directory.
 - `scripts/check-template-drift.sh` audits template metadata drift and override hygiene.
 - `scripts/migrate-template-docs.sh` migrates historical docs to the current template pack with backup-first safety.
@@ -66,13 +68,14 @@ Execution flow:
 4. Render compatibility docs plus project-level spec templates from `assets/templates/`.
 5. Create `.harness/architecture.json`, `.harness/spec-policy.json`, `.harness/doc-impact-rules.json`, `.harness/context-policy.json`, `.harness/run-policy.json`, and `.harness/observability-policy.json`.
 6. Create `.harness/runtime/task-memory.json`, `.harness/runtime/progress.md`, `.harness/evidence/`, and `.harness/metrics/`.
-7. Skip existing files unless `--force` is supplied.
-8. Output a JSON summary with created files, skipped files, and next steps.
+7. Optionally vendor the runtime bundle and scaffold local guardrails when strong constraints are requested.
+8. Skip existing files unless `--force` is supplied.
+9. Output a JSON summary with created files, skipped files, and next steps.
 
 Command:
 
 ```bash
-bash scripts/init-harness.sh [--project-name <name>] [--description <text>] [--template-root <path>] [--profile <name>] [--force] [--dry-run]
+bash scripts/init-harness.sh [--project-name <name>] [--description <text>] [--template-root <path>] [--profile <name>] [--with-git-hook] [--with-husky] [--with-github-actions] [--with-strong-constraints] [--force] [--dry-run]
 ```
 
 Template lookup order for scaffolding:
@@ -165,6 +168,20 @@ bash scripts/plan-harness.sh --task "<task description>" --agent "<agent-name>"
 
 The plan command now writes both a Markdown execution plan and a machine-readable JSON plan, so downstream automation can reason over risk level, required checks, and rollback expectations.
 
+Output JSON fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `status` | string | `"success"` or `"error"` |
+| `title` | string | Original task description |
+| `path` | string | Markdown execution plan path |
+| `machine_plan_path` | string | Machine-readable JSON plan path |
+| `agent` | string | Agent name passed to the command |
+| `dry_run` | bool | Whether the command ran in dry-run mode |
+| `references` | array | Required project doc paths that the task should follow |
+
+The JSON file referenced by `machine_plan_path` uses a different schema from stdout and is intended for automation consumers that need `required_checks`, `risk_level`, `rollback_required`, and related metadata.
+
 ## Baseline Autonomous Flow
 
 Use this when the user wants a mechanically constrained local loop instead of scattered ad-hoc commands.
@@ -175,6 +192,7 @@ Commands:
 bash scripts/harness-exec.sh prepare --task "Add search" --feature-id FEAT-001 --title "Add search" --agent codex --json
 bash scripts/harness-exec.sh verify --feature-id FEAT-001 --json
 bash scripts/harness-exec.sh run --task "Add search" --feature-id FEAT-001 --title "Add search" --agent codex --json
+bash scripts/harness-exec.sh restore --feature-id FEAT-001 --json
 ```
 
 Behavior:
@@ -182,6 +200,9 @@ Behavior:
 - `prepare` creates a feature spec pack if needed, writes the Markdown plus JSON execution plan, and records a task context bundle under `.harness/runtime/context/`.
 - `verify` aggregates spec validation, doc impact, architecture lint, doc freshness, and rollback readiness, then writes a run record, metrics ledger entry, task memory snapshot, progress report, and evidence bundle.
 - `run` chains `prepare -> verify -> autofix-safe -> reverify`, records the final run result, and can trigger retention GC from `.harness/run-policy.json`.
+- `restore` reconstructs the latest task summary, pending checklist items, and recommended context files from `.harness/runtime/`.
+
+When resuming after context compaction, agent restart, or a paused task handoff, run `bash scripts/harness-exec.sh restore --feature-id <id> --json` before making new edits so the next session starts from recorded task memory instead of chat recall.
 
 Current boundary:
 
@@ -276,6 +297,7 @@ Rules:
 - Architecture rules that exist only in prose and never in CI.
 - Unstructured test output that an agent cannot parse.
 - Manual project knowledge trapped in chat history instead of the repo.
+- Resuming a compacted task without running `harness-exec.sh restore` to reload the recorded task state and context bundle.
 - Unbounded agent permissions.
 
 ## References
@@ -300,7 +322,7 @@ Rules:
 - `scripts/check-doc-impact.sh`: diff-based code/doc consistency gate.
 - `scripts/validate-spec.sh`: project/feature spec validation.
 - `scripts/check-rollback-readiness.sh`: rollout/rollback readiness gate.
-- `scripts/harness-exec.sh`: prepare/verify/run orchestration.
+- `scripts/harness-exec.sh`: prepare/verify/run/restore orchestration.
 - `scripts/prepare-template-overrides.sh`: template export and discovery.
 - `scripts/check-template-drift.sh`: template drift and override audit.
 - `scripts/migrate-template-docs.sh`: backup-first historical template migration.

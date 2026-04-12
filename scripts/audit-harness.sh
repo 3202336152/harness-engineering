@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/lib/doc-paths.sh"
 
 ENTRY_SCORE=0
+ENTRY_LINE_COUNT=0
 ENTRY_STATUS=""
 ENTRY_DETAILS=""
 ENTRY_FIX="Run /harness init to create AGENTS.md or CLAUDE.md."
@@ -15,7 +16,7 @@ ENTRY_FIX="Run /harness init to create AGENTS.md or CLAUDE.md."
 DOC_SCORE=0
 DOC_STATUS=""
 DOC_DETAILS=""
-DOC_FIX="Create the project-level spec set under docs/project/ (项目架构、开发规范、测试策略、安全规范) or keep the legacy docs/*.md compatibility files in place."
+DOC_FIX="Create the project-level spec set under docs/project/ (项目架构、开发规范、测试策略、安全规范), and keep .harness/spec-policy.json plus .harness/context-policy.json aligned with it."
 
 FRESHNESS_SCORE=0
 FRESHNESS_STATUS=""
@@ -131,6 +132,7 @@ score_entry_document() {
   file="$(first_existing_entry_document)"
 
   if [ -z "$file" ]; then
+    ENTRY_LINE_COUNT=0
     ENTRY_STATUS="No AGENTS.md or CLAUDE.md found"
     ENTRY_DETAILS="Missing entry document"
     return
@@ -139,13 +141,19 @@ score_entry_document() {
   ENTRY_SCORE=40
   ENTRY_DETAILS="$(append_detail "$ENTRY_DETAILS" "Entry document found: $file")"
   line_count=$(wc -l < "$file" | tr -d ' ')
+  ENTRY_LINE_COUNT="$line_count"
 
   if [ "$line_count" -le 100 ]; then
     ENTRY_SCORE=$((ENTRY_SCORE + 30))
-    ENTRY_DETAILS="$(append_detail "$ENTRY_DETAILS" "Entry document is under 100 lines")"
+    ENTRY_DETAILS="$(append_detail "$ENTRY_DETAILS" "Entry document is under 100 lines ($line_count lines)")"
   elif [ "$line_count" -le 150 ]; then
     ENTRY_SCORE=$((ENTRY_SCORE + 15))
-    ENTRY_DETAILS="$(append_detail "$ENTRY_DETAILS" "Entry document is over 100 lines")"
+    ENTRY_DETAILS="$(append_detail "$ENTRY_DETAILS" "Entry document is over 100 lines ($line_count lines) and should be trimmed")"
+  elif [ "$line_count" -le 200 ]; then
+    ENTRY_SCORE=$((ENTRY_SCORE + 5))
+    ENTRY_DETAILS="$(append_detail "$ENTRY_DETAILS" "Entry document is over 150 lines ($line_count lines); move detailed guidance to docs/")"
+  else
+    ENTRY_DETAILS="$(append_detail "$ENTRY_DETAILS" "WARNING: Entry document exceeds 200 lines ($line_count lines); agent context quality is degraded")"
   fi
 
   if grep -Eiq '^## (Quick Commands|快速命令)' "$file"; then
@@ -163,9 +171,13 @@ score_entry_document() {
     ENTRY_DETAILS="$(append_detail "$ENTRY_DETAILS" "Constraints section present")"
   fi
 
-  ENTRY_STATUS="Entry document score: $ENTRY_SCORE"
+  ENTRY_STATUS="Entry document score: $ENTRY_SCORE ($line_count lines)"
   if [ "$ENTRY_SCORE" -ge 100 ]; then
     ENTRY_FIX="Entry document already looks healthy."
+  elif [ "$line_count" -gt 200 ]; then
+    ENTRY_FIX="Entry document is $line_count lines. Move detailed implementation notes into docs/project/ or docs/references/ and keep the entry document as a short index under 100 lines."
+  elif [ "$line_count" -gt 100 ]; then
+    ENTRY_FIX="Entry document is $line_count lines. Trim inline detail and replace it with short pointers to docs/project/ and docs/features/."
   else
     ENTRY_FIX="Keep the entry document concise and add quick commands, architecture, and constraints sections."
   fi
@@ -173,6 +185,7 @@ score_entry_document() {
 
 score_doc_structure() {
   local file
+  local max_files=""
   for file in \
     "$(first_existing_project_doc architecture || true)" \
     "$(first_existing_project_doc development || true)" \
@@ -203,6 +216,29 @@ score_doc_structure() {
 
   if [ -f .harness/spec-policy.json ]; then
     DOC_DETAILS="$(append_detail "$DOC_DETAILS" ".harness/spec-policy.json found")"
+  fi
+
+  if [ -f .harness/context-policy.json ]; then
+    DOC_DETAILS="$(append_detail "$DOC_DETAILS" ".harness/context-policy.json found")"
+    if command -v jq >/dev/null 2>&1; then
+      max_files="$(jq -r '.max_context_files // empty' .harness/context-policy.json 2>/dev/null || true)"
+      if [ -n "$max_files" ] && [ "$max_files" -gt 0 ] 2>/dev/null && [ "$max_files" -le 15 ] 2>/dev/null; then
+        DOC_SCORE=$((DOC_SCORE + 5))
+        DOC_DETAILS="$(append_detail "$DOC_DETAILS" "Context budget configured (max $max_files files)")"
+      elif [ -n "$max_files" ] && [ "$max_files" -gt 15 ] 2>/dev/null; then
+        DOC_DETAILS="$(append_detail "$DOC_DETAILS" "WARNING: max_context_files=$max_files is high; consider reducing to 12 or fewer")"
+      else
+        DOC_DETAILS="$(append_detail "$DOC_DETAILS" "Context budget file present but max_context_files is missing or invalid")"
+      fi
+    else
+      DOC_DETAILS="$(append_detail "$DOC_DETAILS" "Context budget file present but jq is unavailable for max_context_files inspection")"
+    fi
+  else
+    DOC_DETAILS="$(append_detail "$DOC_DETAILS" "Missing .harness/context-policy.json")"
+  fi
+
+  if [ "$DOC_SCORE" -gt 100 ]; then
+    DOC_SCORE=100
   fi
 
   DOC_STATUS="Documentation structure score: $DOC_SCORE"
@@ -504,6 +540,16 @@ emit_dimension() {
   printf ',"fix":"%s"}' "$(json_escape "$fix")"
 }
 
+emit_entry_dimension() {
+  printf '{"score":%s,"weight":%s,"status":"%s","line_count":%s,"details":' \
+    "$ENTRY_SCORE" \
+    "0.15" \
+    "$(json_escape "$ENTRY_STATUS")" \
+    "$ENTRY_LINE_COUNT"
+  json_array_from_lines "$ENTRY_DETAILS"
+  printf ',"fix":"%s"}' "$(json_escape "$ENTRY_FIX")"
+}
+
 output_report() {
   printf '{'
   printf '"status":"completed",'
@@ -512,7 +558,7 @@ output_report() {
   printf '"maturity_label":"%s",' "$(json_escape "$MATURITY_LABEL")"
   printf '"dimensions":{'
   printf '"entry_document":'
-  emit_dimension "$ENTRY_SCORE" "0.15" "$ENTRY_STATUS" "$ENTRY_DETAILS" "$ENTRY_FIX"
+  emit_entry_dimension
   printf ','
   printf '"doc_structure":'
   emit_dimension "$DOC_SCORE" "0.15" "$DOC_STATUS" "$DOC_DETAILS" "$DOC_FIX"

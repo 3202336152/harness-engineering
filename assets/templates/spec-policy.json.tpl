@@ -7,7 +7,19 @@
   },
   "quality_gate": {
     "strict_default": false,
-    "placeholder_patterns": ["TODO:", "待补充", "在这里", "请补充", "是/否"]
+    "placeholder_patterns": [
+      "TODO:",
+      "待补充",
+      "在这里",
+      "请补充",
+      "是/否",
+      "TBD",
+      "FIXME",
+      "PLACEHOLDER",
+      "<待填写>",
+      "<TODO>",
+      "{{TODO}}"
+    ]
   },
   "project_docs": [
     {
@@ -22,7 +34,7 @@
       "path": "docs/project/项目设计.md",
       "required": true,
       "required_frontmatter": ["template_version", "template_profile", "template_language"],
-      "required_sections": ["## 设计目标", "## 工程设计结论", "## Java 分层设计约定", "## 当前代码挂点与职责分工", "## 异常、错误码与可恢复性设计"]
+      "required_sections": ["## 设计目标", "## 工程设计结论", "## 分层设计约定", "## 当前代码挂点与职责分工", "## 异常、错误码与可恢复性设计"]
     },
     {
       "id": "api-spec",
@@ -36,7 +48,7 @@
       "path": "docs/project/开发规范.md",
       "required": true,
       "required_frontmatter": ["template_version", "template_profile", "template_language"],
-      "required_sections": ["## Java 开发约定", "## 新增功能最小落地清单", "## 编码规则", "## 评审要求"]
+      "required_sections": ["## 技术栈开发约定", "## 新增功能最小落地清单", "## 编码规则", "## 评审要求", "## 分支与提交规范"]
     },
     {
       "id": "requirements",

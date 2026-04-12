@@ -167,6 +167,96 @@ assert_json_field "$output" ".strict_mode" "true"
 assert_json_field "$output" ".quality.total_issue_count" "0"
 teardown_test_dir
 
+it "detects English placeholder markers in strict mode"
+setup_test_dir
+init_git_repo
+mkdir -p .harness docs/project docs/features/FEAT-101-placeholder
+cat > .harness/spec-policy.json <<'EOF'
+{
+  "template_pack": {
+    "name": "custom-pack",
+    "version": "1.1.0",
+    "profile": "generic",
+    "language": "zh-CN"
+  },
+  "quality_gate": {
+    "strict_default": false,
+    "placeholder_patterns": ["TODO:", "TBD", "FIXME", "PLACEHOLDER", "<TODO>", "{{TODO}}"]
+  },
+  "project_docs": [
+    {
+      "id": "architecture",
+      "path": "docs/project/ARCHITECTURE.md",
+      "required": true,
+      "required_frontmatter": ["template_version", "template_profile"],
+      "required_sections": ["## 系统上下文", "## 事务边界与一致性"]
+    }
+  ],
+  "feature_spec": {
+    "base_dir": "docs/features",
+    "required_docs": ["overview.md"],
+    "doc_rules": {
+      "overview.md": {
+        "required_frontmatter": ["template_version", "template_profile"],
+        "required_sections": ["## 业务背景与目标", "## 验收标准"]
+      }
+    }
+  }
+}
+EOF
+cat > docs/project/ARCHITECTURE.md <<'EOF'
+---
+id: project-architecture
+title: 项目架构
+type: project-architecture
+status: active
+owner: team
+last_updated: 2026-04-07
+template_version: 1.1.0
+template_profile: generic
+---
+
+# 项目架构
+
+## 系统上下文
+
+订单服务负责订单创建与状态流转。
+
+## 事务边界与一致性
+
+下单事务仅覆盖订单落库，消息通过 outbox 异步发送。
+EOF
+cat > docs/features/FEAT-101-placeholder/overview.md <<'EOF'
+---
+id: FEAT-101
+title: Placeholder Check
+type: feature-overview
+status: draft
+owner: team
+change_types: ""
+last_updated: 2026-04-07
+template_version: 1.1.0
+template_profile: generic
+---
+
+# 功能概览
+
+## 业务背景与目标
+
+TBD
+
+## 验收标准
+
+- [x] 支持按订单号查询。
+EOF
+output=$(bash "$REPO_ROOT/scripts/validate-spec.sh" --json --strict 2>&1)
+status=$?
+assert_eq "1" "$status" "strict validation fails on English placeholder markers"
+assert_json_field "$output" ".status" "invalid"
+assert_json_field "$output" ".strict_mode" "true"
+assert_json_field "$output" '.features.quality_issues | map(select(.detail == "TBD")) | length' "1"
+teardown_test_dir
+
 it "fails validation when a required feature spec is missing"
 setup_test_dir
 init_git_repo

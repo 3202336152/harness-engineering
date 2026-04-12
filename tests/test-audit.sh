@@ -318,4 +318,65 @@ assert_json_number_gte "$output" ".dimensions.doc_structure.score" "75"
 assert_json_number_gte "$output" ".dimensions.architecture_constraints.score" "60"
 teardown_test_dir
 
+it "surfaces line-count warnings for oversized entry documents"
+setup_test_dir
+init_git_repo
+cat > AGENTS.md <<'EOF'
+# Sample Project
+
+## Quick Commands
+
+- npm test
+
+## Architecture
+
+Layered service architecture.
+
+## Constraints
+
+Keep docs updated.
+EOF
+for i in $(seq 1 205); do
+  printf 'Extra detail line %s\n' "$i" >> AGENTS.md
+done
+git add AGENTS.md >/dev/null 2>&1
+git commit -m "add oversized entry document" --quiet >/dev/null 2>&1
+output=$(bash "$REPO_ROOT/scripts/audit-harness.sh" 2>&1)
+status=$?
+assert_success "$status" "audit command succeeds on oversized entry document"
+assert_json_field "$output" ".dimensions.entry_document.line_count" "218"
+assert_json_field "$output" ".dimensions.entry_document.score" "70"
+assert_json_field "$output" '.dimensions.entry_document.status | contains("218 lines")' "true"
+if printf '%s' "$output" | jq -r '.dimensions.entry_document.fix' | grep -q "218 lines"; then
+  pass_test "entry document fix references exact line count"
+else
+  fail_test "entry document fix missing exact line count"
+fi
+teardown_test_dir
+
+it "checks context policy presence and budget in documentation structure"
+setup_test_dir
+init_git_repo
+mkdir -p docs/project .harness
+cat > docs/project/ARCHITECTURE.md <<'EOF'
+# 项目架构
+
+## 系统上下文
+
+订单服务负责订单创建。
+EOF
+cat > .harness/context-policy.json <<'EOF'
+{
+  "version": "1.0.0",
+  "max_context_files": 12
+}
+EOF
+output=$(bash "$REPO_ROOT/scripts/audit-harness.sh" 2>&1)
+status=$?
+assert_success "$status" "audit command succeeds with context policy"
+assert_json_field "$output" ".dimensions.doc_structure.score" "30"
+assert_json_field "$output" '.dimensions.doc_structure.details | index(".harness/context-policy.json found") != null' "true"
+assert_json_field "$output" '.dimensions.doc_structure.details | index("Context budget configured (max 12 files)") != null' "true"
+teardown_test_dir
+
 print_summary
