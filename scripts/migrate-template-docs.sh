@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-CONFIG_PATH=".harness/spec-policy.json"
-MIGRATION_ROOT=".harness/migrations"
+CONFIG_PATH="harness/.harness/spec-policy.json"
+MIGRATION_ROOT="harness/.harness/migrations"
 OUTPUT_JSON=0
 WRITE_REPORT=""
 DRY_RUN=0
@@ -125,7 +125,7 @@ collect_drifted_docs() {
   local feature_base_dir
   local path
 
-  feature_base_dir="$(jq -r '.feature_spec.base_dir // "docs/features"' "$CONFIG_PATH")"
+  feature_base_dir="$(jq -r '.feature_spec.base_dir // "harness/docs/features"' "$CONFIG_PATH")"
 
   while IFS= read -r path; do
     [ -n "$path" ] || continue
@@ -151,7 +151,7 @@ collect_quality_issue_docs() {
   local feature_base_dir
   local path
 
-  feature_base_dir="$(jq -r '.feature_spec.base_dir // "docs/features"' "$CONFIG_PATH")"
+  feature_base_dir="$(jq -r '.feature_spec.base_dir // "harness/docs/features"' "$CONFIG_PATH")"
 
   while IFS= read -r path; do
     [ -n "$path" ] || continue

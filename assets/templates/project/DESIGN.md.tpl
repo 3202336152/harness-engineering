@@ -58,7 +58,7 @@ template_language: {{TEMPLATE_LANGUAGE}}
 ## 当前代码挂点与职责分工
 
 建议用表格列出当前复杂链路的真实入口和落点：
-如果仓库存在 `.harness/runtime/java-doc-scan.json`，请先对照其中的 `application_services`、`domain_services`、`clients`，再补真实挂点。
+如果仓库存在 `harness/.harness/runtime/java-doc-scan.json`，请先对照其中的 `application_services`、`domain_services`、`clients`，再补真实挂点。
 
 | 业务能力 | 接口层入口 | 编排服务 | 规则/领域服务 | 数据/外部依赖 | 备注 |
 |----------|------------|----------|---------------|---------------|------|
@@ -131,7 +131,7 @@ template_language: {{TEMPLATE_LANGUAGE}}
 
 ## 设计决策记录
 
-将重要决策关联到 `docs/project/核心信念.md` 或 `docs/decisions/`，并说明：
+将重要决策关联到 `harness/docs/project/核心信念.md` 或 `harness/docs/decisions/`，并说明：
 
 - 决策背景
 - 可选方案

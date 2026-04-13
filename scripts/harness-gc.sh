@@ -2,10 +2,10 @@
 
 set -euo pipefail
 
-RUN_POLICY_PATH=".harness/run-policy.json"
-CONTEXT_DIR=".harness/runtime/context"
-RUNS_DIR=".harness/runs"
-EVIDENCE_DIR=".harness/evidence"
+RUN_POLICY_PATH="harness/.harness/run-policy.json"
+CONTEXT_DIR="harness/.harness/runtime/context"
+RUNS_DIR="harness/.harness/runs"
+EVIDENCE_DIR="harness/.harness/evidence"
 KEEP_CONTEXT=-1
 KEEP_RUNS=-1
 KEEP_EVIDENCE=-1

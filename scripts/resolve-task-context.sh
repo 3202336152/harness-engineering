@@ -6,12 +6,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=scripts/lib/doc-paths.sh
 . "$SCRIPT_DIR/lib/doc-paths.sh"
+# shellcheck source=scripts/lib/stack-detect.sh
+. "$SCRIPT_DIR/lib/stack-detect.sh"
 
 TASK=""
 FEATURE_ID=""
-CONFIG_PATH=".harness/spec-policy.json"
-POLICY_PATH=".harness/context-policy.json"
-RUN_POLICY_PATH=".harness/run-policy.json"
+CONFIG_PATH="harness/.harness/spec-policy.json"
+POLICY_PATH="harness/.harness/context-policy.json"
+RUN_POLICY_PATH="harness/.harness/run-policy.json"
 OUTPUT_JSON=0
 WRITE_BUNDLE=""
 STACK="unknown"
@@ -152,21 +154,7 @@ require_jq() {
 }
 
 detect_stack() {
-  if [ -f package.json ]; then
-    STACK="node"
-  elif [ -f pom.xml ]; then
-    STACK="java-maven"
-  elif [ -f build.gradle ] || [ -f build.gradle.kts ]; then
-    STACK="java-gradle"
-  elif [ -f pyproject.toml ] || [ -f setup.py ]; then
-    STACK="python"
-  elif [ -f go.mod ]; then
-    STACK="go"
-  elif [ -f Cargo.toml ]; then
-    STACK="rust"
-  else
-    STACK="unknown"
-  fi
+  STACK="$(detect_project_stack)"
 }
 
 test_command() {
@@ -195,7 +183,7 @@ risk_level() {
 
 resolve_feature_dir() {
   local feature_base_dir
-  feature_base_dir="$(jq -r '.feature_spec.base_dir // "docs/features"' "$CONFIG_PATH")"
+  feature_base_dir="$(jq -r '.feature_spec.base_dir // "harness/docs/features"' "$CONFIG_PATH")"
 
   if [ -z "$FEATURE_ID" ] || [ ! -d "$feature_base_dir" ]; then
     return 0
@@ -287,7 +275,7 @@ EOF
 
       while IFS= read -r path; do
         [ -n "$path" ] || continue
-        if printf '%s' "$path" | grep -q '^docs/project/'; then
+        if printf '%s' "$path" | grep -q '^harness/docs/project/'; then
           path="$(first_existing_project_doc_by_path "$path" || true)"
         fi
         [ -f "$path" ] && append_recommended_context "$path"
@@ -309,7 +297,7 @@ EOF
       while IFS= read -r item; do
         [ -n "$item" ] || continue
         if printf '%s' "$item" | grep -q '/'; then
-          if printf '%s' "$item" | grep -q '^docs/project/'; then
+          if printf '%s' "$item" | grep -q '^harness/docs/project/'; then
             item="$(first_existing_project_doc_by_path "$item" || true)"
           fi
           [ -f "$item" ] && append_required_context "$item"

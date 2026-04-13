@@ -171,7 +171,7 @@ Implement: $task
 - Follow $(project_doc_path architecture) layered model and dependency boundaries.
 - Comply with $(project_doc_path development) and the project-level spec set.
 - Use $(project_doc_path testing) as the verification baseline for new changes.
-- Update the related feature spec files under docs/features/ when behavior or architecture changes.
+- Update the related feature spec files under harness/docs/features/ when behavior or architecture changes.
 
 ## Acceptance Criteria
 - [ ] All relevant tests pass

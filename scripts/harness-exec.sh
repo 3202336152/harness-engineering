@@ -22,16 +22,17 @@ USE_STAGED=0
 OUTPUT_JSON=0
 PLAN_DIR="$(exec_plan_dir_path active)"
 
-RUN_POLICY_PATH=".harness/run-policy.json"
-OBSERVABILITY_POLICY_PATH=".harness/observability-policy.json"
-TASK_MEMORY_PATH=".harness/runtime/task-memory.json"
-PROGRESS_REPORT_PATH=".harness/runtime/progress.md"
-RUN_LEDGER_PATH=".harness/runs/ledger.jsonl"
-METRICS_LEDGER_PATH=".harness/metrics/ledger.jsonl"
+RUN_POLICY_PATH="harness/.harness/run-policy.json"
+OBSERVABILITY_POLICY_PATH="harness/.harness/observability-policy.json"
+TASK_MEMORY_PATH="harness/.harness/runtime/task-memory.json"
+PROGRESS_REPORT_PATH="harness/.harness/runtime/progress.md"
+RUN_LEDGER_PATH="harness/.harness/runs/ledger.jsonl"
+METRICS_LEDGER_PATH="harness/.harness/metrics/ledger.jsonl"
 
 RESOLVED_FEATURE_DIR=""
 RESOLVED_TASK=""
 RESOLVED_TITLE=""
+TEMP_FILES=()
 
 json_escape() {
   local text="$1"
@@ -42,6 +43,23 @@ json_escape() {
   text=${text//$'\t'/\\t}
   printf '%s' "$text"
 }
+
+cleanup_temp_files() {
+  local path=""
+  for path in "${TEMP_FILES[@]-}"; do
+    [ -n "$path" ] || continue
+    rm -f "$path" >/dev/null 2>&1 || true
+  done
+}
+
+new_temp_file() {
+  local path=""
+  path="$(mktemp)"
+  TEMP_FILES+=("$path")
+  printf '%s' "$path"
+}
+
+trap cleanup_temp_files EXIT
 
 json_array_from_lines() {
   printf '%s\n' "$1" | jq -Rn '[inputs | select(length > 0)]'
@@ -223,10 +241,10 @@ policy_mode_enabled() {
 
 ensure_runtime_dirs() {
   mkdir -p \
-    ".harness/runtime/context" \
-    ".harness/runs" \
-    ".harness/evidence" \
-    ".harness/metrics"
+    "harness/.harness/runtime/context" \
+    "harness/.harness/runs" \
+    "harness/.harness/evidence" \
+    "harness/.harness/metrics"
 }
 
 iso_timestamp() {
@@ -235,11 +253,24 @@ iso_timestamp() {
 
 generate_run_id() {
   local mode="$1"
-  printf '%s-%s-%s' "$mode" "$(date +%Y%m%dT%H%M%S)" "$$"
+  local unique=""
+
+  if command -v uuidgen >/dev/null 2>&1; then
+    unique="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+  else
+    unique="$(date +%Y%m%dT%H%M%S)"
+    if date +%N >/dev/null 2>&1; then
+      unique="$unique-$(date +%N)"
+    fi
+    unique="$unique-$$-$RANDOM"
+  fi
+
+  printf '%s-%s' "$mode" "$unique"
 }
 
 find_feature_dir() {
-  local feature_base_dir="docs/features"
+  local feature_base_dir=""
+  feature_base_dir="$(feature_specs_root_path)"
   if [ -z "$FEATURE_ID" ] || [ ! -d "$feature_base_dir" ]; then
     return 0
   fi
@@ -301,7 +332,7 @@ update_task_memory() {
       '{version:$version,project:$project,updated_at:$updated_at,tasks:[]}' > "$memory_path"
   fi
 
-  tmp="$(mktemp)"
+  tmp="$(new_temp_file)"
   jq \
     --arg project "$project_name" \
     --arg feature_id "$feature_id" \
@@ -562,8 +593,8 @@ restore_stage() {
   selected_run_record_path="$(printf '%s' "$selected_task_json" | jq -r '.run_record_path // ""' 2>/dev/null || printf '')"
   selected_evidence_dir="$(printf '%s' "$selected_task_json" | jq -r '.evidence_dir // ""' 2>/dev/null || printf '')"
 
-  if [ -n "$selected_feature_id" ] && [ -d docs/features ]; then
-    feature_dir="$(find docs/features -mindepth 1 -maxdepth 1 -type d -name "$selected_feature_id-*" | sort | head -1)"
+  if [ -n "$selected_feature_id" ] && [ -d "$(feature_specs_root_path)" ]; then
+    feature_dir="$(find "$(feature_specs_root_path)" -mindepth 1 -maxdepth 1 -type d -name "$selected_feature_id-*" | sort | head -1)"
   fi
 
   if [ -n "$feature_dir" ]; then
@@ -730,12 +761,12 @@ finalize_with_runtime_artifacts() {
   ensure_runtime_dirs
   resolve_feature_metadata
 
-  result_tmp="$(mktemp)"
-  final_tmp="$(mktemp)"
-  artifacts_tmp="$(mktemp)"
-  evidence_tmp="$(mktemp)"
-  gc_tmp="$(mktemp)"
-  summary_tmp="$(mktemp)"
+  result_tmp="$(new_temp_file)"
+  final_tmp="$(new_temp_file)"
+  artifacts_tmp="$(new_temp_file)"
+  evidence_tmp="$(new_temp_file)"
+  gc_tmp="$(new_temp_file)"
+  summary_tmp="$(new_temp_file)"
 
   printf '%s\n' "$result_json" > "$result_tmp"
   recorded_at="$(iso_timestamp)"
@@ -749,7 +780,7 @@ finalize_with_runtime_artifacts() {
   record_evidence="$(load_policy_bool '.record_evidence' 'true')"
 
   if [ "$record_run_results" = "true" ]; then
-    run_record_path=".harness/runs/$run_id.json"
+    run_record_path="harness/.harness/runs/$run_id.json"
     run_record_path_output="$run_record_path"
     run_ledger_path_output="$RUN_LEDGER_PATH"
     touch "$RUN_LEDGER_PATH"
@@ -793,7 +824,7 @@ finalize_with_runtime_artifacts() {
 
   jq -n '{status:"skipped"}' > "$evidence_tmp"
   if [ "$record_evidence" = "true" ] && policy_mode_enabled '(.evidence_on_modes // [])' "$mode"; then
-    evidence_dir=".harness/evidence/$run_id"
+    evidence_dir="harness/.harness/evidence/$run_id"
     artifacts_evidence_dir="$evidence_dir"
     evidence_output="$(run_json_command evidence_status \
       bash "$SCRIPT_DIR/collect-runtime-evidence.sh" \
@@ -1016,7 +1047,7 @@ prepare_stage() {
 
   slug="$(slugify "$TASK")"
   [ -n "$slug" ] || slug="context"
-  context_path=".harness/runtime/context/$slug.json"
+  context_path="harness/.harness/runtime/context/$slug.json"
   context_cmd=(bash "$SCRIPT_DIR/resolve-task-context.sh" --task "$TASK" --json --write-bundle "$context_path")
   if [ -n "$FEATURE_ID" ]; then
     context_cmd+=(--feature-id "$FEATURE_ID")
@@ -1027,9 +1058,9 @@ prepare_stage() {
     return "$context_status"
   fi
 
-  feature_tmp="$(mktemp)"
-  plan_tmp="$(mktemp)"
-  context_tmp="$(mktemp)"
+  feature_tmp="$(new_temp_file)"
+  plan_tmp="$(new_temp_file)"
+  context_tmp="$(new_temp_file)"
   printf '%s\n' "$feature_json" > "$feature_tmp"
   printf '%s\n' "$plan_json" > "$plan_tmp"
   printf '%s\n' "$context_json" > "$context_tmp"
@@ -1090,11 +1121,11 @@ verify_stage() {
     fi
   done
 
-  spec_tmp="$(mktemp)"
-  doc_tmp="$(mktemp)"
-  lint_tmp="$(mktemp)"
-  freshness_tmp="$(mktemp)"
-  rollback_tmp="$(mktemp)"
+  spec_tmp="$(new_temp_file)"
+  doc_tmp="$(new_temp_file)"
+  lint_tmp="$(new_temp_file)"
+  freshness_tmp="$(new_temp_file)"
+  rollback_tmp="$(new_temp_file)"
   printf '%s\n' "$spec_json" > "$spec_tmp"
   printf '%s\n' "$doc_json" > "$doc_tmp"
   printf '%s\n' "$lint_json" > "$lint_tmp"
@@ -1176,10 +1207,10 @@ run_stage() {
     fi
   fi
 
-  prepare_tmp="$(mktemp)"
-  verify_tmp="$(mktemp)"
-  autofix_tmp="$(mktemp)"
-  verify_after_tmp="$(mktemp)"
+  prepare_tmp="$(new_temp_file)"
+  verify_tmp="$(new_temp_file)"
+  autofix_tmp="$(new_temp_file)"
+  verify_after_tmp="$(new_temp_file)"
   printf '%s\n' "$prepare_json" > "$prepare_tmp"
   printf '%s\n' "$verify_json" > "$verify_tmp"
   printf '%s\n' "$autofix_json" > "$autofix_tmp"

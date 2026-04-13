@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-CONFIG_PATH=".harness/spec-policy.json"
+CONFIG_PATH="harness/.harness/spec-policy.json"
 OUTPUT_JSON=0
 USER_TEMPLATE_ROOT="${HARNESS_TEMPLATE_ROOT:-}"
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -209,7 +209,7 @@ check_feature_docs() {
   local doc_file
   local feature_name
 
-  feature_base_dir="$(jq -r '.feature_spec.base_dir // "docs/features"' "$CONFIG_PATH")"
+  feature_base_dir="$(jq -r '.feature_spec.base_dir // "harness/docs/features"' "$CONFIG_PATH")"
   [ -d "$feature_base_dir" ] || return
 
   while IFS= read -r doc_file; do
@@ -388,7 +388,7 @@ main() {
     exit 1
   fi
 
-  init_template_resolver "$DEFAULT_TEMPLATES_DIR" "" ".harness/templates"
+  init_template_resolver "$DEFAULT_TEMPLATES_DIR" "" "harness/.harness/templates"
 
   EXPECTED_TEMPLATE_VERSION="$(jq -r '.template_pack.version // empty' "$CONFIG_PATH")"
   EXPECTED_TEMPLATE_PROFILE="$(jq -r '.template_pack.profile // empty' "$CONFIG_PATH")"
@@ -397,7 +397,7 @@ main() {
   check_project_docs
   check_feature_docs
 
-  add_override_root ".harness/templates"
+  add_override_root "harness/.harness/templates"
   add_override_root "$USER_TEMPLATE_ROOT"
 
   if [ "${#OVERRIDE_ROOTS[@]}" -gt 0 ]; then

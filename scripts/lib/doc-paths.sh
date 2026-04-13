@@ -2,6 +2,38 @@
 
 set -euo pipefail
 
+harness_root_path() {
+  printf 'harness'
+}
+
+harness_docs_root_path() {
+  printf '%s/docs' "$(harness_root_path)"
+}
+
+harness_runtime_root_path() {
+  printf '%s/.harness' "$(harness_root_path)"
+}
+
+legacy_docs_root_path() {
+  printf 'docs'
+}
+
+legacy_runtime_root_path() {
+  printf '.harness'
+}
+
+project_docs_dir_path() {
+  printf '%s/project' "$(harness_docs_root_path)"
+}
+
+feature_specs_root_path() {
+  printf '%s/features' "$(harness_docs_root_path)"
+}
+
+decisions_dir_path() {
+  printf '%s/decisions' "$(harness_docs_root_path)"
+}
+
 first_existing_doc_path() {
   local path
   for path in "$@"; do
@@ -59,11 +91,11 @@ project_doc_legacy_filename() {
 }
 
 project_doc_path() {
-  printf 'docs/project/%s' "$(project_doc_filename "$1")"
+  printf '%s/%s' "$(project_docs_dir_path)" "$(project_doc_filename "$1")"
 }
 
 exec_plan_root_path() {
-  printf '.harness/exec-plans'
+  printf '%s/exec-plans' "$(harness_runtime_root_path)"
 }
 
 exec_plan_dir_path() {
@@ -71,19 +103,19 @@ exec_plan_dir_path() {
 }
 
 product_specs_dir_path() {
-  printf '.harness/product-specs'
+  printf '%s/product-specs' "$(harness_runtime_root_path)"
 }
 
 project_references_dir_path() {
-  printf '.harness/references'
+  printf '%s/references' "$(harness_runtime_root_path)"
 }
 
 project_index_doc_path() {
-  printf 'docs/%s' "$(project_doc_filename "$1")"
+  printf '%s/%s' "$(harness_docs_root_path)" "$(project_doc_filename "$1")"
 }
 
 design_doc_path() {
-  printf 'docs/design-docs/%s' "$(project_doc_filename "$1")"
+  printf '%s/design-docs/%s' "$(harness_docs_root_path)" "$(project_doc_filename "$1")"
 }
 
 project_doc_id_from_path() {
@@ -134,82 +166,68 @@ first_existing_project_doc() {
     architecture)
       first_existing_doc_path \
         "$(project_doc_path architecture)" \
-        "docs/project/ARCHITECTURE.md" \
-        "$(project_index_doc_path architecture-index)" \
-        "docs/ARCHITECTURE.md"
+        "$(project_docs_dir_path)/ARCHITECTURE.md"
       ;;
     design)
       first_existing_doc_path \
         "$(project_doc_path design)" \
-        "docs/project/DESIGN.md"
+        "$(project_docs_dir_path)/DESIGN.md"
       ;;
     api-spec)
       first_existing_doc_path \
         "$(project_doc_path api-spec)" \
-        "docs/project/API-SPEC.md"
+        "$(project_docs_dir_path)/API-SPEC.md"
       ;;
     development)
       first_existing_doc_path \
         "$(project_doc_path development)" \
-        "docs/project/DEVELOPMENT.md" \
-        "$(project_index_doc_path conventions-index)" \
-        "docs/CONVENTIONS.md"
+        "$(project_docs_dir_path)/DEVELOPMENT.md"
       ;;
     requirements)
       first_existing_doc_path \
         "$(project_doc_path requirements)" \
-        "docs/project/REQUIREMENTS.md"
+        "$(project_docs_dir_path)/REQUIREMENTS.md"
       ;;
     testing)
       first_existing_doc_path \
         "$(project_doc_path testing)" \
-        "docs/project/TESTING.md" \
-        "$(project_index_doc_path testing-index)" \
-        "docs/TESTING.md"
+        "$(project_docs_dir_path)/TESTING.md"
       ;;
     security)
       first_existing_doc_path \
         "$(project_doc_path security)" \
-        "docs/project/SECURITY.md" \
-        "$(project_index_doc_path security-index)" \
-        "docs/SECURITY.md"
+        "$(project_docs_dir_path)/SECURITY.md"
       ;;
     operations)
       first_existing_doc_path \
         "$(project_doc_path operations)" \
-        "docs/project/OPERATIONS.md"
+        "$(project_docs_dir_path)/OPERATIONS.md"
       ;;
     observability)
       first_existing_doc_path \
         "$(project_doc_path observability)" \
-        "docs/project/OBSERVABILITY.md"
+        "$(project_docs_dir_path)/OBSERVABILITY.md"
       ;;
     architecture-index)
       first_existing_doc_path \
-        "$(project_index_doc_path architecture-index)" \
-        "docs/ARCHITECTURE.md"
+        "$(project_index_doc_path architecture-index)"
       ;;
     conventions-index)
       first_existing_doc_path \
-        "$(project_index_doc_path conventions-index)" \
-        "docs/CONVENTIONS.md"
+        "$(project_index_doc_path conventions-index)"
       ;;
     testing-index)
       first_existing_doc_path \
-        "$(project_index_doc_path testing-index)" \
-        "docs/TESTING.md"
+        "$(project_index_doc_path testing-index)"
       ;;
     security-index)
       first_existing_doc_path \
-        "$(project_index_doc_path security-index)" \
-        "docs/SECURITY.md"
+        "$(project_index_doc_path security-index)"
       ;;
     core-beliefs)
       first_existing_doc_path \
         "$(project_doc_path core-beliefs)" \
-        "docs/project/core-beliefs.md" \
-        "$(design_doc_path core-beliefs)" \
-        "docs/design-docs/core-beliefs.md"
+        "$(project_docs_dir_path)/core-beliefs.md"
       ;;
     *)
       return 1

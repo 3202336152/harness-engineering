@@ -28,7 +28,7 @@ init_git_repo
 bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
 bash "$REPO_ROOT/scripts/new-feature-spec.sh" --id FEAT-010 --title "Order Query" --owner alice --change-types api >/dev/null 2>&1
 
-cat > docs/project/项目架构.md <<'EOF'
+cat > harness/docs/project/项目架构.md <<'EOF'
 ---
 id: project-architecture
 title: 项目架构
@@ -56,7 +56,7 @@ controller / application / domain / infrastructure 四层分离。
 下单事务仅覆盖订单落库，消息通过 outbox 异步发送。
 EOF
 
-cat > docs/features/FEAT-010-order-query/功能概览.md <<'EOF'
+cat > harness/docs/features/FEAT-010-order-query/功能概览.md <<'EOF'
 ---
 id: FEAT-010
 title: Order Query
@@ -85,11 +85,11 @@ template_profile: generic
 EOF
 
 bash "$REPO_ROOT/scripts/prepare-template-overrides.sh" --template feature/overview.md.tpl >/dev/null 2>&1
-mkdir -p .harness/templates/feature
-cat > .harness/templates/feature/status.md.tpl <<'EOF'
+mkdir -p harness/.harness/templates/feature
+cat > harness/.harness/templates/feature/status.md.tpl <<'EOF'
 # 自定义状态模板
 EOF
-cat > .harness/templates/feature/custom-extra.md.tpl <<'EOF'
+cat > harness/.harness/templates/feature/custom-extra.md.tpl <<'EOF'
 # 自定义扩展模板
 EOF
 
@@ -103,9 +103,9 @@ assert_json_number_gte "$output" ".docs.missing_metadata_count" "1"
 assert_json_number_gte "$output" ".overrides.redundant_count" "1"
 assert_json_number_gte "$output" ".overrides.custom_count" "1"
 assert_json_number_gte "$output" ".overrides.orphan_count" "1"
-assert_json_field "$output" '.overrides.redundant_overrides | index(".harness/templates/feature/overview.md.tpl") != null' "true"
-assert_json_field "$output" '.overrides.custom_overrides | index(".harness/templates/feature/status.md.tpl") != null' "true"
-assert_json_field "$output" '.overrides.orphan_overrides | index(".harness/templates/feature/custom-extra.md.tpl") != null' "true"
+assert_json_field "$output" '.overrides.redundant_overrides | index("harness/.harness/templates/feature/overview.md.tpl") != null' "true"
+assert_json_field "$output" '.overrides.custom_overrides | index("harness/.harness/templates/feature/status.md.tpl") != null' "true"
+assert_json_field "$output" '.overrides.orphan_overrides | index("harness/.harness/templates/feature/custom-extra.md.tpl") != null' "true"
 teardown_test_dir
 
 print_summary

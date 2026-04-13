@@ -5,7 +5,7 @@ set -euo pipefail
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEFAULT_TEMPLATES_DIR="$SKILL_DIR/assets/templates"
-OUTPUT_ROOT=".harness/templates"
+OUTPUT_ROOT="harness/.harness/templates"
 TEMPLATE_PATH=""
 FORCE=0
 LIST_ONLY=0

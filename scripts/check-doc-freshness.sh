@@ -3,8 +3,12 @@
 set -euo pipefail
 
 THRESHOLD=30
-SCAN_PATH="docs"
+SCAN_PATH="harness/docs"
 OUTPUT_JSON=0
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# shellcheck source=scripts/lib/doc-paths.sh
+. "$SCRIPT_DIR/lib/doc-paths.sh"
 
 json_escape() {
   local text="$1"
@@ -30,7 +34,7 @@ parse_args() {
         shift 2
         ;;
       --path)
-        SCAN_PATH="${2:-docs}"
+        SCAN_PATH="${2:-$(harness_docs_root_path)}"
         shift 2
         ;;
       --json)
@@ -117,6 +121,9 @@ main() {
   local status="passed"
 
   parse_args "$@"
+  if [ -z "$SCAN_PATH" ]; then
+    SCAN_PATH="$(harness_docs_root_path)"
+  fi
   now="$(date +%s)"
 
   while IFS= read -r file; do

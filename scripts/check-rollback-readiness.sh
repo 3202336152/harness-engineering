@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 FEATURE_ID=""
 FEATURE_DIR=""
-CONFIG_PATH=".harness/spec-policy.json"
+CONFIG_PATH="harness/.harness/spec-policy.json"
 OUTPUT_JSON=0
 
 json_escape() {
@@ -83,7 +83,7 @@ require_jq() {
 
 resolve_feature_dir() {
   local feature_base_dir
-  feature_base_dir="$(jq -r '.feature_spec.base_dir // "docs/features"' "$CONFIG_PATH")"
+  feature_base_dir="$(jq -r '.feature_spec.base_dir // "harness/docs/features"' "$CONFIG_PATH")"
 
   if [ -n "$FEATURE_DIR" ]; then
     printf '%s' "$FEATURE_DIR"

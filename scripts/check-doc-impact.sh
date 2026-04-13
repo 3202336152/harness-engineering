@@ -2,13 +2,14 @@
 
 set -euo pipefail
 
-RULES_PATH=".harness/doc-impact-rules.json"
+RULES_PATH="harness/.harness/doc-impact-rules.json"
 OUTPUT_JSON=0
 USE_STAGED=0
 BASE_REF=""
 HEAD_REF="HEAD"
 SUGGEST_ACTIONS=0
 WRITE_ACTION_PLAN=""
+DIFF_SOURCE="working_tree"
 
 CHANGED_FILES=()
 TRIGGERED_RULES=()
@@ -121,16 +122,26 @@ load_changed_files() {
   local file
 
   if [ "$USE_STAGED" -eq 1 ]; then
+    DIFF_SOURCE="staged"
     diff_output="$(git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR)"
   elif [ -n "$BASE_REF" ]; then
+    DIFF_SOURCE="range"
     diff_output="$(git -c core.quotePath=false diff --name-only --diff-filter=ACMR "$BASE_REF" "$HEAD_REF")"
   else
-    diff_output="$(git -c core.quotePath=false diff --name-only --diff-filter=ACMR)"
+    if git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR | grep -q .; then
+      DIFF_SOURCE="staged"
+      diff_output="$(git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR)"
+    else
+      DIFF_SOURCE="working_tree"
+      diff_output="$(git -c core.quotePath=false diff --name-only --diff-filter=ACMR)"
+    fi
   fi
 
   while IFS= read -r file; do
     [ -n "$file" ] || continue
-    CHANGED_FILES+=("$file")
+    if [ "${#CHANGED_FILES[@]}" -eq 0 ] || append_unique_value "$file" "${CHANGED_FILES[@]-}"; then
+      CHANGED_FILES+=("$file")
+    fi
   done <<EOF
 $diff_output
 EOF
@@ -240,6 +251,7 @@ emit_json_report() {
   printf '{'
   printf '"status":"%s",' "$(json_escape "$status")"
   printf '"rules_path":"%s",' "$(json_escape "$RULES_PATH")"
+  printf '"diff_source":"%s",' "$(json_escape "$DIFF_SOURCE")"
   printf '"changed_files_count":%s,' "${#CHANGED_FILES[@]}"
   printf '"changed_files":'
   append_array_json "${CHANGED_FILES[@]-}"
@@ -272,11 +284,11 @@ emit_text_report() {
   local action
 
   if [ "${#VIOLATIONS[@]}" -eq 0 ]; then
-    printf 'Doc impact check passed. Triggered rules: %s, changed files: %s\n' "${#TRIGGERED_RULES[@]}" "${#CHANGED_FILES[@]}"
+    printf 'Doc impact check passed. Diff source: %s, triggered rules: %s, changed files: %s\n' "$DIFF_SOURCE" "${#TRIGGERED_RULES[@]}" "${#CHANGED_FILES[@]}"
     return
   fi
 
-  printf 'Doc impact check failed.\n'
+  printf 'Doc impact check failed. Diff source: %s\n' "$DIFF_SOURCE"
   for record in "${VIOLATIONS[@]-}"; do
     IFS='|' read -r rule_id description guidance _ <<EOF
 $record
@@ -324,15 +336,15 @@ candidate_path_from_pattern() {
   local pattern="$1"
 
   case "$pattern" in
-    '^docs/project/接口规范\.md$'|'^docs/project/API-SPEC\.md$') printf 'docs/project/接口规范.md' ;;
-    '^docs/project/项目设计\.md$'|'^docs/project/DESIGN\.md$') printf 'docs/project/项目设计.md' ;;
-    '^docs/project/安全规范\.md$'|'^docs/project/SECURITY\.md$') printf 'docs/project/安全规范.md' ;;
-    '^docs/project/开发规范\.md$'|'^docs/project/DEVELOPMENT\.md$') printf 'docs/project/开发规范.md' ;;
-    '^docs/project/项目架构\.md$'|'^docs/project/ARCHITECTURE\.md$') printf 'docs/project/项目架构.md' ;;
-    '^docs/features/[^/]+/接口设计\.md$'|'^docs/features/[^/]+/api-spec\.md$') printf 'docs/features/<feature-id>/接口设计.md' ;;
-    '^docs/features/[^/]+/数据设计\.md$'|'^docs/features/[^/]+/db-spec\.md$') printf 'docs/features/<feature-id>/数据设计.md' ;;
-    '^docs/features/[^/]+/方案设计\.md$'|'^docs/features/[^/]+/design\.md$') printf 'docs/features/<feature-id>/方案设计.md' ;;
-    '^docs/features/[^/]+/发布回滚\.md$'|'^docs/features/[^/]+/rollout\.md$') printf 'docs/features/<feature-id>/发布回滚.md' ;;
+    '^harness/docs/project/接口规范\.md$'|'^harness/docs/project/API-SPEC\.md$') printf 'harness/docs/project/接口规范.md' ;;
+    '^harness/docs/project/项目设计\.md$'|'^harness/docs/project/DESIGN\.md$') printf 'harness/docs/project/项目设计.md' ;;
+    '^harness/docs/project/安全规范\.md$'|'^harness/docs/project/SECURITY\.md$') printf 'harness/docs/project/安全规范.md' ;;
+    '^harness/docs/project/开发规范\.md$'|'^harness/docs/project/DEVELOPMENT\.md$') printf 'harness/docs/project/开发规范.md' ;;
+    '^harness/docs/project/项目架构\.md$'|'^harness/docs/project/ARCHITECTURE\.md$') printf 'harness/docs/project/项目架构.md' ;;
+    '^harness/docs/features/[^/]+/接口设计\.md$'|'^harness/docs/features/[^/]+/api-spec\.md$') printf 'harness/docs/features/<feature-id>/接口设计.md' ;;
+    '^harness/docs/features/[^/]+/数据设计\.md$'|'^harness/docs/features/[^/]+/db-spec\.md$') printf 'harness/docs/features/<feature-id>/数据设计.md' ;;
+    '^harness/docs/features/[^/]+/方案设计\.md$'|'^harness/docs/features/[^/]+/design\.md$') printf 'harness/docs/features/<feature-id>/方案设计.md' ;;
+    '^harness/docs/features/[^/]+/发布回滚\.md$'|'^harness/docs/features/[^/]+/rollout\.md$') printf 'harness/docs/features/<feature-id>/发布回滚.md' ;;
     *)
       printf '%s' "$pattern" \
         | sed -e 's/^\^//' -e 's/\$$//' -e 's#\\\.#.#g' -e 's#\\/#/#g'

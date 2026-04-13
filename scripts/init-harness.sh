@@ -19,7 +19,7 @@ SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEFAULT_TEMPLATES_DIR="$SKILL_DIR/assets/templates"
 USER_TEMPLATE_ROOT="${HARNESS_TEMPLATE_ROOT:-}"
-VENDORED_SKILL_ROOT=".harness/skill-runtime/harness-engineering"
+VENDORED_SKILL_ROOT="harness/.harness/skill-runtime/harness-engineering"
 TEMPLATE_PACK_NAME="${TEMPLATE_PACK_NAME_DEFAULT:-harness-engineering-default}"
 TEMPLATE_VERSION="${TEMPLATE_VERSION_DEFAULT:-1.1.0}"
 TEMPLATE_LANGUAGE="${TEMPLATE_LANGUAGE_DEFAULT:-zh-CN}"
@@ -33,6 +33,8 @@ RESOLVED_ENTRY_FILES=()
 . "$SCRIPT_DIR/lib/template-resolver.sh"
 # shellcheck source=scripts/lib/template-profile.sh
 . "$SCRIPT_DIR/lib/template-profile.sh"
+# shellcheck source=scripts/lib/stack-detect.sh
+. "$SCRIPT_DIR/lib/stack-detect.sh"
 # shellcheck source=scripts/lib/doc-paths.sh
 . "$SCRIPT_DIR/lib/doc-paths.sh"
 # shellcheck source=scripts/lib/entry-docs.sh
@@ -386,21 +388,7 @@ detect_environment() {
     printf 'Warning: Not a git repository. Some features may be limited.\n' >&2
   fi
 
-  if [ -f package.json ]; then
-    STACK="node"
-  elif [ -f pom.xml ]; then
-    STACK="java-maven"
-  elif [ -f build.gradle ] || [ -f build.gradle.kts ]; then
-    STACK="java-gradle"
-  elif [ -f pyproject.toml ] || [ -f setup.py ]; then
-    STACK="python"
-  elif [ -f go.mod ]; then
-    STACK="go"
-  elif [ -f Cargo.toml ]; then
-    STACK="rust"
-  else
-    STACK="unknown"
-  fi
+  STACK="$(detect_project_stack)"
 
   if [ -z "$TEMPLATE_PROFILE" ]; then
     TEMPLATE_PROFILE="$(default_template_profile_for_stack "$STACK")"
@@ -548,23 +536,24 @@ EOF
 create_directories() {
   local dir
   for dir in \
-    docs \
-    docs/project \
-    docs/features \
-    docs/decisions \
+    "$(harness_root_path)" \
+    "$(harness_docs_root_path)" \
+    "$(project_docs_dir_path)" \
+    "$(feature_specs_root_path)" \
+    "$(decisions_dir_path)" \
     .github \
-    .harness \
+    "$(harness_runtime_root_path)" \
     "$(exec_plan_dir_path active)" \
     "$(exec_plan_dir_path completed)" \
     "$(exec_plan_dir_path tech-debt)" \
     "$(product_specs_dir_path)" \
     "$(project_references_dir_path)" \
-    .harness/runtime \
-    .harness/runtime/context \
-    .harness/runs \
-    .harness/evidence \
-    .harness/metrics \
-    .harness/migrations; do
+    "$(harness_runtime_root_path)/runtime" \
+    "$(harness_runtime_root_path)/runtime/context" \
+    "$(harness_runtime_root_path)/runs" \
+    "$(harness_runtime_root_path)/evidence" \
+    "$(harness_runtime_root_path)/metrics" \
+    "$(harness_runtime_root_path)/migrations"; do
     if [ "$DRY_RUN" -eq 1 ]; then
       CREATED_DIRS+=("$dir")
     else
@@ -577,7 +566,7 @@ create_directories() {
 
   if guardrails_requested; then
     for dir in \
-      .harness/skill-runtime; do
+      "$(harness_runtime_root_path)/skill-runtime"; do
       if [ "$DRY_RUN" -eq 1 ]; then
         CREATED_DIRS+=("$dir")
       else
@@ -842,7 +831,7 @@ generate_guardrails() {
 }
 
 generate_java_scan_baseline() {
-  local scan_path=".harness/runtime/java-doc-scan.json"
+  local scan_path="harness/.harness/runtime/java-doc-scan.json"
 
   if [ "$STACK" != "java-maven" ] && [ "$STACK" != "java-gradle" ]; then
     return 0
@@ -878,15 +867,15 @@ generate_files() {
   render_template "project/OPERATIONS.md.tpl" "$(project_doc_path operations)"
   render_template "project/OBSERVABILITY.md.tpl" "$(project_doc_path observability)"
   render_template "PR_TEMPLATE.md.tpl" ".github/PULL_REQUEST_TEMPLATE.md"
-  render_template "architecture.json.tpl" ".harness/architecture.json"
-  render_template "spec-policy.json.tpl" ".harness/spec-policy.json"
-  render_template "doc-impact-rules.json.tpl" ".harness/doc-impact-rules.json"
-  render_template "context-policy.json.tpl" ".harness/context-policy.json"
-  render_template "run-policy.json.tpl" ".harness/run-policy.json"
-  render_template "observability-policy.json.tpl" ".harness/observability-policy.json"
-  render_template "task-memory.json.tpl" ".harness/runtime/task-memory.json"
-  render_template "last-audit.json.tpl" ".harness/runtime/last-audit.json"
-  render_template "progress.md.tpl" ".harness/runtime/progress.md"
+  render_template "architecture.json.tpl" "harness/.harness/architecture.json"
+  render_template "spec-policy.json.tpl" "harness/.harness/spec-policy.json"
+  render_template "doc-impact-rules.json.tpl" "harness/.harness/doc-impact-rules.json"
+  render_template "context-policy.json.tpl" "harness/.harness/context-policy.json"
+  render_template "run-policy.json.tpl" "harness/.harness/run-policy.json"
+  render_template "observability-policy.json.tpl" "harness/.harness/observability-policy.json"
+  render_template "task-memory.json.tpl" "harness/.harness/runtime/task-memory.json"
+  render_template "last-audit.json.tpl" "harness/.harness/runtime/last-audit.json"
+  render_template "progress.md.tpl" "harness/.harness/runtime/progress.md"
   generate_java_scan_baseline
   generate_guardrails
 }
@@ -942,13 +931,13 @@ output_report() {
       "Use the hydration_required_docs list from this init output as the minimum project doc set that still needs real repository content" \
       "Review the generated entry doc(s) and add project-specific architecture details" \
       "Refresh the Java inventory with bash scripts/scan-java-project.sh --json before hydrating project docs after major code changes" \
-      "After init, have the coding agent read key project files before filling docs/project/; do not rely on guesses" \
+      "After init, have the coding agent read key project files before filling harness/docs/project/; do not rely on guesses" \
       "Cover build files, entrypoints, package structure, representative adapters, core services, and application.yml before claiming project facts" \
       "Fill in $(project_doc_path architecture) and $(project_doc_path requirements) from observed code, and mark unknown areas as 待确认 or 未覆盖范围" \
-      "Review .harness/spec-policy.json to align required project-level and feature-level specs" \
-      "Review .harness/doc-impact-rules.json so code changes and doc updates can be gated together" \
-      "Review .harness/context-policy.json and .harness/run-policy.json before enabling autonomous workflows" \
-      "Review .harness/observability-policy.json so logs, metrics, and traces can be captured into evidence bundles" \
+      "Review harness/.harness/spec-policy.json to align required project-level and feature-level specs" \
+      "Review harness/.harness/doc-impact-rules.json so code changes and doc updates can be gated together" \
+      "Review harness/.harness/context-policy.json and harness/.harness/run-policy.json before enabling autonomous workflows" \
+      "Review harness/.harness/observability-policy.json so logs, metrics, and traces can be captured into evidence bundles" \
       "Create your first feature spec with bash scripts/new-feature-spec.sh --id FEAT-001 --title \"Your feature\" --owner <name> --change-types <types>" \
       "Use bash scripts/harness-exec.sh prepare --task \"Your feature\" --feature-id FEAT-001 --title \"Your feature\" to generate plan and context together" \
       "For Java profiles, validate-spec now defaults to strict doc-state enforcement; scaffold docs will fail validation until hydrated" \
@@ -963,13 +952,13 @@ output_report() {
       "Use the hydration_required_docs list from this init output as the minimum project doc set that still needs real repository content" \
       "Review the generated entry doc(s) and add project-specific architecture details" \
       "$( [ "$java_stack_recommended" -eq 1 ] && printf '%s' 'Refresh the Java inventory with bash scripts/scan-java-project.sh --json before hydrating project docs after major code changes' )" \
-      "After init, have the coding agent read key project files before filling docs/project/; do not rely on guesses" \
+      "After init, have the coding agent read key project files before filling harness/docs/project/; do not rely on guesses" \
       "Cover build files, entrypoints, package structure, representative adapters, core services, and application.yml before claiming project facts" \
       "Fill in $(project_doc_path architecture) and $(project_doc_path requirements) from observed code, and mark unknown areas as 待确认 or 未覆盖范围" \
-      "Review .harness/spec-policy.json to align required project-level and feature-level specs" \
-      "Review .harness/doc-impact-rules.json so code changes and doc updates can be gated together" \
-      "Review .harness/context-policy.json and .harness/run-policy.json before enabling autonomous workflows" \
-      "Review .harness/observability-policy.json so logs, metrics, and traces can be captured into evidence bundles" \
+      "Review harness/.harness/spec-policy.json to align required project-level and feature-level specs" \
+      "Review harness/.harness/doc-impact-rules.json so code changes and doc updates can be gated together" \
+      "Review harness/.harness/context-policy.json and harness/.harness/run-policy.json before enabling autonomous workflows" \
+      "Review harness/.harness/observability-policy.json so logs, metrics, and traces can be captured into evidence bundles" \
       "Create your first feature spec with bash scripts/new-feature-spec.sh --id FEAT-001 --title \"Your feature\" --owner <name> --change-types <types>" \
       "Use bash scripts/harness-exec.sh prepare --task \"Your feature\" --feature-id FEAT-001 --title \"Your feature\" to generate plan and context together" \
       "$( [ "$java_stack_recommended" -eq 1 ] && printf '%s' 'For Java profiles, validate-spec now defaults to strict doc-state enforcement; scaffold docs will fail validation until hydrated' )" \
@@ -983,7 +972,7 @@ output_report() {
 main() {
   parse_args "$@"
   resolve_entry_documents
-  init_template_resolver "$DEFAULT_TEMPLATES_DIR" "$USER_TEMPLATE_ROOT" ".harness/templates"
+  init_template_resolver "$DEFAULT_TEMPLATES_DIR" "$USER_TEMPLATE_ROOT" "harness/.harness/templates"
   detect_environment
   prepare_guardrail_options
   create_directories

@@ -12,8 +12,8 @@ describe "lint-architecture.sh"
 it "reports a violation when a lower layer imports a higher layer"
 setup_test_dir
 init_git_repo
-mkdir -p .harness src/user/types src/user/service
-cat > .harness/architecture.json <<'EOF'
+mkdir -p harness/.harness src/user/types src/user/service
+cat > harness/.harness/architecture.json <<'EOF'
 {
   "layers": ["types", "service"],
   "src_root": "src",
@@ -36,8 +36,8 @@ teardown_test_dir
 it "passes when imports respect layer order"
 setup_test_dir
 init_git_repo
-mkdir -p .harness src/user/types src/user/service
-cat > .harness/architecture.json <<'EOF'
+mkdir -p harness/.harness src/user/types src/user/service
+cat > harness/.harness/architecture.json <<'EOF'
 {
   "layers": ["types", "service"],
   "src_root": "src",
@@ -60,8 +60,8 @@ teardown_test_dir
 it "honors explicit forbidden dependency rules"
 setup_test_dir
 init_git_repo
-mkdir -p .harness src/main/java/order/application src/main/java/order/infrastructure
-cat > .harness/architecture.json <<'EOF'
+mkdir -p harness/.harness src/main/java/order/application src/main/java/order/infrastructure
+cat > harness/.harness/architecture.json <<'EOF'
 {
   "layers": ["domain", "application", "infrastructure", "interfaces"],
   "src_root": "src/main/java",
@@ -80,6 +80,40 @@ status=$?
 assert_eq "1" "$status" "lint exits non-zero on forbidden dependency"
 assert_json_field "$output" ".status" "violations"
 assert_json_field "$output" '.violations | map(select(.message | contains("Forbidden dependency"))) | length' "1"
+teardown_test_dir
+
+it "parses real Java imports and catches forbidden layer dependencies"
+setup_test_dir
+init_git_repo
+mkdir -p harness/.harness src/main/java/com/example/order/application src/main/java/com/example/order/infrastructure
+cat > harness/.harness/architecture.json <<'EOF'
+{
+  "layers": ["domain", "application", "infrastructure", "interfaces"],
+  "src_root": "src/main/java",
+  "cross_domain_allowed_via": "anti-corruption-layer",
+  "forbidden_dependencies": ["application -> infrastructure"]
+}
+EOF
+cat > src/main/java/com/example/order/application/OrderApplicationService.java <<'EOF'
+package com.example.order.application;
+
+import com.example.order.infrastructure.OrderRepositoryImpl;
+
+public class OrderApplicationService {
+  private final OrderRepositoryImpl repository = new OrderRepositoryImpl();
+}
+EOF
+cat > src/main/java/com/example/order/infrastructure/OrderRepositoryImpl.java <<'EOF'
+package com.example.order.infrastructure;
+
+public class OrderRepositoryImpl {}
+EOF
+output=$(bash "$REPO_ROOT/scripts/lint-architecture.sh" 2>&1)
+status=$?
+assert_eq "1" "$status" "lint exits non-zero on real Java forbidden dependency"
+assert_json_field "$output" ".status" "violations"
+assert_json_field "$output" '.violations | map(select(.import == "com.example.order.infrastructure.OrderRepositoryImpl")) | length' "1"
+assert_json_field "$output" '.violations | map(select(.layer == "application" and .target_layer == "infrastructure")) | length' "1"
 teardown_test_dir
 
 print_summary

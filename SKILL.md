@@ -3,9 +3,9 @@ name: harness-engineering
 description: >
   Scaffold, audit, and maintain AI coding agent work environments using
   Harness Engineering principles. Use when the user wants to initialize
-  entry docs or docs/ structure, audit harness maturity, generate execution
+  entry docs or harness/docs structure, audit harness maturity, generate execution
   plans, validate specs, check doc impact or freshness, restore recent
-  task context from .harness/runtime, or prepare a project for AI coding
+  task context from harness/.harness/runtime, or prepare a project for AI coding
   agent workflows.
 license: MIT
 compatibility: Requires bash, git, and jq. Works with any language or framework. Windows users should run it from WSL2 or another POSIX-compatible shell.
@@ -60,18 +60,23 @@ Use this when the project is missing an entry doc such as `AGENTS.md` or
 `CLAUDE.md`, missing core docs, or the
 user asks to prepare a repo for AI coding agents and spec-driven delivery.
 
+All generated project-local directories now live under `harness/` so they do not
+collide with an application's own root-level `docs/` tree. Root-level files are
+kept only when tool or platform conventions require them, such as `AGENTS.md`,
+`CLAUDE.md`, `.github/`, or git hooks.
+
 Execution flow:
 
 1. Detect whether the current directory is a git repository.
 2. Detect the stack from `package.json`, `pyproject.toml`, `go.mod`, or
    `Cargo.toml`.
-3. Create the standard `docs/project/`, `docs/features/`, `docs/decisions/`,
-   `.harness/exec-plans/{active,completed,tech-debt}/`,
-   `.harness/product-specs/`, `.harness/references/`, and `.github/`
+3. Create the standard `harness/docs/project/`, `harness/docs/features/`, `harness/docs/decisions/`,
+   `harness/.harness/exec-plans/{active,completed,tech-debt}/`,
+   `harness/.harness/product-specs/`, `harness/.harness/references/`, and `.github/`
    directories.
 4. Render the canonical entry template into the requested tool-specific filenames, plus the project-level spec templates from `assets/templates/`.
-5. Create `.harness/architecture.json`, `.harness/spec-policy.json`, `.harness/doc-impact-rules.json`, `.harness/context-policy.json`, `.harness/run-policy.json`, and `.harness/observability-policy.json`.
-6. Create `.harness/runtime/task-memory.json`, `.harness/runtime/last-audit.json`, `.harness/runtime/progress.md`, `.harness/evidence/`, and `.harness/metrics/`.
+5. Create `harness/.harness/architecture.json`, `harness/.harness/spec-policy.json`, `harness/.harness/doc-impact-rules.json`, `harness/.harness/context-policy.json`, `harness/.harness/run-policy.json`, and `harness/.harness/observability-policy.json`.
+6. Create `harness/.harness/runtime/task-memory.json`, `harness/.harness/runtime/last-audit.json`, `harness/.harness/runtime/progress.md`, `harness/.harness/evidence/`, and `harness/.harness/metrics/`.
 7. Optionally vendor the runtime bundle and scaffold local guardrails when strong constraints are requested.
 8. When `--with-strong-constraints` is requested, also enable strict spec validation in the generated local hook so placeholder docs are blocked before commit.
 9. Skip existing files unless `--force` is supplied, so rerunning init can add missing tool-specific entry files without overwriting the existing docs.
@@ -87,11 +92,11 @@ Template lookup order for scaffolding:
 
 1. `--template-root <path>`
 2. `HARNESS_TEMPLATE_ROOT`
-3. `.harness/templates/`
+3. `harness/.harness/templates/`
 4. Built-in defaults under `assets/templates/`
 
 Generated project-level docs also include `template_version`, `template_profile`, `template_language`, and `doc_state` frontmatter.
-The scaffold also adds `docs/project/运行基线.md` and `docs/project/可观测性基线.md` so rollout, on-call, and telemetry rules are part of the shared truth.
+The scaffold also adds `harness/docs/project/运行基线.md` and `harness/docs/project/可观测性基线.md` so rollout, on-call, and telemetry rules are part of the shared truth.
 By default, init renders both `CLAUDE.md` and `AGENTS.md` from the same canonical entry template so common agent tools share identical content.
 Use `--tool codex`, `--tool claude-code`, `--tool gemini-cli`, or `--tool all` to target specific tool filenames; rerunning init with another tool adds the missing entry file instead of replacing the previous one.
 Use `--entry-file <path>` when a tool expects a custom entry filename that is not built in.
@@ -104,9 +109,9 @@ Before first use on a new machine, run `bash scripts/check-runtime-deps.sh --jso
 
 `/harness init` only scaffolds structure, templates, and policy files. It does not semantically read the whole repository or auto-fill project truth. New docs start as `doc_state: scaffold`, and should be flipped to `doc_state: hydrated` only after the host model has read the relevant code and replaced template-only content with verified project facts.
 
-For Java repos, first refresh `.harness/runtime/java-doc-scan.json` with `bash scripts/scan-java-project.sh --json`. The scan is the full inventory baseline for package roots, entrypoints, controllers, listeners, jobs, clients, application services, and domain services.
+For Java repos, first refresh `harness/.harness/runtime/java-doc-scan.json` with `bash scripts/scan-java-project.sh --json`. The scan is the full inventory baseline for package roots, entrypoints, controllers, listeners, jobs, clients, application services, and domain services.
 
-After initialization, the host coding model should inspect the repo before filling `docs/project/*`:
+After initialization, the host coding model should inspect the repo before filling `harness/docs/project/*`:
 
 1. Read build files such as `pom.xml` or `build.gradle*`.
 2. Read the main startup class or equivalent entrypoint.
@@ -148,13 +153,13 @@ bash scripts/audit-harness.sh
 ```
 
 The script prints JSON only on stdout so agents can parse it safely.
-When `.harness/` already exists, the audit also refreshes `.harness/runtime/last-audit.json` so the entry document can reason about audit staleness without relying on chat memory.
+When `harness/.harness/` already exists, the audit also refreshes `harness/.harness/runtime/last-audit.json` so the entry document can reason about audit staleness without relying on chat memory.
 
 ## Command: /harness plan
 
 Use this when the user asks to implement a feature following harness rules.
-The plan should align with the project-level spec set in `docs/project/`
-and remind the user to update the related feature spec pack in `docs/features/`.
+The plan should align with the project-level spec set in `harness/docs/project/`
+and remind the user to update the related feature spec pack in `harness/docs/features/`.
 If the required feature spec pack does not exist yet, create it with `harness-exec.sh prepare` or `new-feature-spec.sh` before relying on the execution plan alone.
 
 Plan template:
@@ -169,8 +174,8 @@ Active
 <clear goal>
 
 ## Constraints
-- Follow docs/project/项目架构.md
-- Follow docs/project/开发规范.md
+- Follow harness/docs/project/项目架构.md
+- Follow harness/docs/project/开发规范.md
 - Keep tests, docs, and related feature specs updated
 
 ## Acceptance Criteria
@@ -188,7 +193,7 @@ Active
 - [ ] Integration or UI work
 ```
 
-Store plans in `.harness/exec-plans/active/`.
+Store plans in `harness/.harness/exec-plans/active/`.
 
 Command:
 
@@ -227,10 +232,10 @@ bash scripts/harness-exec.sh restore --feature-id FEAT-001 --json
 
 Behavior:
 
-- `prepare` creates a feature spec pack if needed, writes the Markdown plus JSON execution plan, and records a task context bundle under `.harness/runtime/context/`.
+- `prepare` creates a feature spec pack if needed, writes the Markdown plus JSON execution plan, and records a task context bundle under `harness/.harness/runtime/context/`.
 - `verify` aggregates spec validation, doc impact, architecture lint, doc freshness, and rollback readiness, then writes a run record, metrics ledger entry, task memory snapshot, progress report, and evidence bundle.
-- `run` chains `prepare -> verify -> autofix-safe -> reverify`, records the final run result, and can trigger retention GC from `.harness/run-policy.json`.
-- `restore` reconstructs the latest task summary, pending checklist items, and recommended context files from `.harness/runtime/`.
+- `run` chains `prepare -> verify -> autofix-safe -> reverify`, records the final run result, and can trigger retention GC from `harness/.harness/run-policy.json`.
+- `restore` reconstructs the latest task summary, pending checklist items, and recommended context files from `harness/.harness/runtime/`.
 
 Rerun semantics:
 
@@ -249,7 +254,7 @@ Current boundary:
 
 ## Spec Workflow
 
-Project-level specs live under `docs/project/` and act as shared project truth:
+Project-level specs live under `harness/docs/project/` and act as shared project truth:
 
 - `核心信念.md`
 - `项目架构.md`
@@ -262,7 +267,7 @@ Project-level specs live under `docs/project/` and act as shared project truth:
 - `测试策略.md`
 - `安全规范.md`
 
-Feature-level specs live under `docs/features/<feature-id>-<title-slug>/`.
+Feature-level specs live under `harness/docs/features/<feature-id>-<title-slug>/`.
 Human-facing spec content and generated Markdown file names default to Chinese.
 Each feature pack also includes a `manifest.json` with required docs, related project docs, verification checks, risk level, rollback requirement, and template metadata.
 
@@ -273,7 +278,7 @@ Default required docs:
 - `测试方案.md`
 - `状态.md`
 
-Additional docs are triggered by `change_types` from `.harness/spec-policy.json`.
+Additional docs are triggered by `change_types` from `harness/.harness/spec-policy.json`.
 Examples: `接口设计.md`, `数据设计.md`, `发布回滚.md`.
 
 Commands:
@@ -294,8 +299,8 @@ bash scripts/migrate-template-docs.sh --json
 bash scripts/harness-gc.sh --json
 ```
 
-The generated feature docs inherit the template metadata from `.harness/spec-policy.json`.
-The generated project scaffold also includes `.harness/doc-impact-rules.json` so teams can gate manual code changes against required doc updates.
+The generated feature docs inherit the template metadata from `harness/.harness/spec-policy.json`.
+The generated project scaffold also includes `harness/.harness/doc-impact-rules.json` so teams can gate manual code changes against required doc updates.
 Use `--strict` when the team is ready to fail validation on placeholder text, missing sections, and missing template metadata.
 Use `check-template-drift.sh` when the template pack has evolved and you need to identify stale generated docs, redundant overrides, or orphaned custom templates.
 
@@ -310,7 +315,7 @@ Java profiles: Interfaces -> Application -> Domain; Infrastructure -> Domain
 
 Rules:
 
-- Dependencies follow the active `.harness/architecture.json` profile.
+- Dependencies follow the active `harness/.harness/architecture.json` profile.
 - Same-layer imports should be avoided.
 - Cross-domain communication should go through provider interfaces or the configured anti-corruption boundary.
 - CI should enforce the important boundaries mechanically.

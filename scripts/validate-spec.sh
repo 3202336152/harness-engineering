@@ -2,12 +2,12 @@
 
 set -euo pipefail
 
-CONFIG_PATH=".harness/spec-policy.json"
+CONFIG_PATH="harness/.harness/spec-policy.json"
 OUTPUT_JSON=0
 STRICT_MODE=-1
 WRITE_FIX_PLAN=""
 AUTOFIX_SAFE=0
-JAVA_DOC_SCAN_PATH=".harness/runtime/java-doc-scan.json"
+JAVA_DOC_SCAN_PATH="harness/.harness/runtime/java-doc-scan.json"
 
 MISSING_PROJECT_DOCS=()
 INVALID_FEATURES=()
@@ -34,6 +34,8 @@ REQUIRE_HYDRATED_DOC_STATE=0
 . "$SCRIPT_DIR/lib/template-resolver.sh"
 # shellcheck source=scripts/lib/template-profile.sh
 . "$SCRIPT_DIR/lib/template-profile.sh"
+# shellcheck source=scripts/lib/stack-detect.sh
+. "$SCRIPT_DIR/lib/stack-detect.sh"
 # shellcheck source=scripts/lib/doc-paths.sh
 . "$SCRIPT_DIR/lib/doc-paths.sh"
 
@@ -203,21 +205,7 @@ determine_strict_mode() {
 }
 
 detect_stack() {
-  if [ -f package.json ]; then
-    STACK="node"
-  elif [ -f pom.xml ]; then
-    STACK="java-maven"
-  elif [ -f build.gradle ] || [ -f build.gradle.kts ]; then
-    STACK="java-gradle"
-  elif [ -f pyproject.toml ] || [ -f setup.py ]; then
-    STACK="python"
-  elif [ -f go.mod ]; then
-    STACK="go"
-  elif [ -f Cargo.toml ]; then
-    STACK="rust"
-  else
-    STACK="unknown"
-  fi
+  STACK="$(detect_project_stack)"
 }
 
 test_command() {
@@ -600,7 +588,7 @@ evaluate_repo() {
   reset_results
   check_project_docs
 
-  feature_base_dir="$(jq -r '.feature_spec.base_dir // "docs/features"' "$CONFIG_PATH")"
+  feature_base_dir="$(jq -r '.feature_spec.base_dir // "harness/docs/features"' "$CONFIG_PATH")"
   if [ -d "$feature_base_dir" ]; then
     while IFS= read -r feature_dir; do
       [ -n "$feature_dir" ] || continue
@@ -784,7 +772,7 @@ autofix_missing_feature_docs() {
   local feature_base_dir
   local feature_dir
 
-  feature_base_dir="$(jq -r '.feature_spec.base_dir // "docs/features"' "$CONFIG_PATH")"
+  feature_base_dir="$(jq -r '.feature_spec.base_dir // "harness/docs/features"' "$CONFIG_PATH")"
   for record in "${INVALID_FEATURES[@]-}"; do
     [ -n "$record" ] || continue
     feature="${record%%|*}"
@@ -941,7 +929,7 @@ emit_fix_actions_json() {
   local doc
   local feature_base_dir
 
-  feature_base_dir="$(jq -r '.feature_spec.base_dir // "docs/features"' "$CONFIG_PATH")"
+  feature_base_dir="$(jq -r '.feature_spec.base_dir // "harness/docs/features"' "$CONFIG_PATH")"
 
   printf '['
   for path in "${MISSING_PROJECT_DOCS[@]-}"; do
@@ -1065,7 +1053,7 @@ main() {
   detect_stack
   load_template_pack_metadata
   load_quality_gate_metadata
-  init_template_resolver "$DEFAULT_TEMPLATES_DIR" "$USER_TEMPLATE_ROOT" ".harness/templates"
+  init_template_resolver "$DEFAULT_TEMPLATES_DIR" "$USER_TEMPLATE_ROOT" "harness/.harness/templates"
   determine_strict_mode
   evaluate_repo
 

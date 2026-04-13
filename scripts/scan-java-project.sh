@@ -3,14 +3,14 @@
 set -euo pipefail
 
 OUTPUT_JSON=1
-OUTPUT_PATH=".harness/runtime/java-doc-scan.json"
-SRC_ROOT="src/main/java"
-RES_ROOT="src/main/resources"
+OUTPUT_PATH="harness/.harness/runtime/java-doc-scan.json"
 STACK="unknown"
 GENERATED_AT="$(date +%FT%T%z)"
 
 BUILD_FILES=()
 MODULE_PATHS=()
+SOURCE_ROOTS=()
+RESOURCE_ROOTS=()
 PACKAGE_ROOTS=()
 CONFIG_FILES=()
 ENTRYPOINTS=()
@@ -143,9 +143,13 @@ parse_args() {
 }
 
 detect_stack() {
-  if [ -f pom.xml ]; then
+  if find . \
+    \( -path './.git' -o -path './harness' -o -path './target' -o -path './build' -o -path './.build' -o -path './node_modules' \) -prune -o \
+    -type f -name 'pom.xml' -print -quit 2>/dev/null | grep -q .; then
     STACK="java-maven"
-  elif [ -f build.gradle ] || [ -f build.gradle.kts ]; then
+  elif find . \
+    \( -path './.git' -o -path './harness' -o -path './target' -o -path './build' -o -path './.build' -o -path './node_modules' \) -prune -o \
+    \( -type f -name 'build.gradle' -o -type f -name 'build.gradle.kts' \) -print -quit 2>/dev/null | grep -q .; then
     STACK="java-gradle"
   else
     STACK="unknown"
@@ -153,30 +157,106 @@ detect_stack() {
 }
 
 require_java_repo() {
-  if [ "$STACK" = "unknown" ] && [ ! -d "$SRC_ROOT" ]; then
+  if [ "$STACK" = "unknown" ] && [ "${#SOURCE_ROOTS[@]}" -eq 0 ]; then
     printf '{"status":"error","error":"No Java build file or src/main/java directory found"}\n'
     exit 1
   fi
 }
 
+is_package_root_suffix_segment() {
+  case "$1" in
+    interfaces|interface|http|web|rest|mq|messaging|listener|listeners|job|jobs|task|tasks|controller|controllers|facade|facades|adapter|adapters|consumer|consumers|producer|producers|persistence|scheduler|scheduling|repository|repositories|client|clients|gateway|gateways|application|domain|infrastructure|infra|impl)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 package_root_from_package() {
   local package_name="$1"
-  printf '%s' "$package_name" | awk -F. 'NF >= 3 { printf "%s.%s.%s", $1, $2, $3; next } { printf "%s", $0 }'
+  local -a segments=()
+  local count=0
+  local last_segment=""
+  local previous_segment=""
+  local index=0
+  local root=""
+
+  IFS='.' read -r -a segments <<< "$package_name"
+  count="${#segments[@]}"
+
+  while [ "$count" -gt 3 ]; do
+    last_segment="${segments[$((count - 1))]}"
+    previous_segment=""
+    if [ "$count" -gt 1 ]; then
+      previous_segment="${segments[$((count - 2))]}"
+    fi
+
+    if is_package_root_suffix_segment "$last_segment"; then
+      count=$((count - 1))
+      continue
+    fi
+
+    if [ "$last_segment" = "service" ] && {
+      [ "$previous_segment" = "application" ] || \
+      [ "$previous_segment" = "domain" ] || \
+      [ "$previous_segment" = "infrastructure" ] || \
+      [ "$previous_segment" = "infra" ];
+    }; then
+      count=$((count - 1))
+      continue
+    fi
+
+    break
+  done
+
+  root="${segments[0]}"
+  index=1
+  while [ "$index" -lt "$count" ]; do
+    root="$root.${segments[$index]}"
+    index=$((index + 1))
+  done
+
+  printf '%s' "$root"
+}
+
+has_java_annotation() {
+  local path="$1"
+  local annotation_pattern="$2"
+
+  awk -v annotation_pattern="$annotation_pattern" '
+    {
+      line=$0
+      sub(/[[:space:]]*\/\/.*$/, "", line)
+      if (line ~ ("^[[:space:]]*@(" annotation_pattern ")(\\(|[[:space:]]|$)")) {
+        found=1
+        exit
+      }
+    }
+    END { exit found ? 0 : 1 }
+  ' "$path"
 }
 
 discover_build_files() {
-  [ -f pom.xml ] && append_unique_to_array "BUILD_FILES" "pom.xml"
-  [ -f build.gradle ] && append_unique_to_array "BUILD_FILES" "build.gradle"
-  [ -f build.gradle.kts ] && append_unique_to_array "BUILD_FILES" "build.gradle.kts"
-  [ -f settings.gradle ] && append_unique_to_array "BUILD_FILES" "settings.gradle"
-  [ -f settings.gradle.kts ] && append_unique_to_array "BUILD_FILES" "settings.gradle.kts"
+  local path=""
+  local build_path=""
+
+  while IFS= read -r build_path; do
+    [ -n "$build_path" ] || continue
+    append_unique_to_array "BUILD_FILES" "$build_path"
+  done <<EOF
+$(find . \
+  \( -path './.git' -o -path './harness' -o -path './target' -o -path './build' -o -path './.build' -o -path './node_modules' \) -prune -o \
+  \( -name 'pom.xml' -o -name 'build.gradle' -o -name 'build.gradle.kts' -o -name 'settings.gradle' -o -name 'settings.gradle.kts' \) -print | sed 's#^\./##' | sort -u)
+EOF
 
   while IFS= read -r path; do
     [ -n "$path" ] || continue
     append_unique_to_array "MODULE_PATHS" "$path"
   done <<EOF
 $(find . \
-  \( -path './.git' -o -path './.harness' -o -path './target' -o -path './build' -o -path './.build' -o -path './node_modules' \) -prune -o \
+  \( -path './.git' -o -path './harness' -o -path './target' -o -path './build' -o -path './.build' -o -path './node_modules' \) -prune -o \
   \( -name 'pom.xml' -o -name 'build.gradle' -o -name 'build.gradle.kts' \) -print | sed 's#^\./##' | xargs -I{} dirname "{}" | sort -u)
 EOF
 
@@ -192,28 +272,59 @@ $(printf '%s\n' "${BUILD_FILES[@]-}" | sort -u)
 EOF
 }
 
-discover_config_files() {
-  [ -d "$RES_ROOT" ] || return 0
+discover_source_roots() {
+  local module_path=""
+  local source_root=""
+  local resource_root=""
 
-  while IFS= read -r path; do
-    [ -n "$path" ] || continue
-    append_unique_to_array "CONFIG_FILES" "$path"
-    append_unique_to_array "RECOMMENDED_READS" "$path"
-  done <<EOF
-$(find "$RES_ROOT" -maxdepth 1 -type f \( -name 'application*.yml' -o -name 'application*.yaml' -o -name 'application*.properties' \) | sort)
+  for module_path in "${MODULE_PATHS[@]-}"; do
+    if [ "$module_path" = "." ]; then
+      source_root="src/main/java"
+      resource_root="src/main/resources"
+    else
+      source_root="$module_path/src/main/java"
+      resource_root="$module_path/src/main/resources"
+    fi
+
+    if [ -d "$source_root" ]; then
+      append_unique_to_array "SOURCE_ROOTS" "$source_root"
+    fi
+    if [ -d "$resource_root" ]; then
+      append_unique_to_array "RESOURCE_ROOTS" "$resource_root"
+    fi
+  done
+}
+
+discover_config_files() {
+  local resource_root=""
+
+  for resource_root in "${RESOURCE_ROOTS[@]-}"; do
+    [ -d "$resource_root" ] || continue
+
+    while IFS= read -r path; do
+      [ -n "$path" ] || continue
+      append_unique_to_array "CONFIG_FILES" "$path"
+      append_unique_to_array "RECOMMENDED_READS" "$path"
+    done <<EOF
+$(find "$resource_root" -type f \
+  \( -name 'application*.yml' -o -name 'application*.yaml' -o -name 'application*.properties' -o \
+     -name 'bootstrap*.yml' -o -name 'bootstrap*.yaml' -o -name 'bootstrap*.properties' -o \
+     -name 'logback-spring.xml' -o -name 'logback.xml' -o -name 'spring.factories' -o \
+     -name 'org.springframework.boot.autoconfigure.AutoConfiguration.imports' \) | sort)
 EOF
+  done
 }
 
 java_file_list() {
-  if [ ! -d "$SRC_ROOT" ]; then
-    return 0
-  fi
-
-  if command -v rg >/dev/null 2>&1; then
-    rg --files "$SRC_ROOT" -g '*.java' | sort
-  else
-    find "$SRC_ROOT" -type f -name '*.java' | sort
-  fi
+  local source_root=""
+  for source_root in "${SOURCE_ROOTS[@]-}"; do
+    [ -d "$source_root" ] || continue
+    if command -v rg >/dev/null 2>&1; then
+      rg --files "$source_root" -g '*.java'
+    else
+      find "$source_root" -type f -name '*.java'
+    fi
+  done | sort -u
 }
 
 classify_java_file() {
@@ -237,11 +348,11 @@ classify_java_file() {
     append_unique_to_array "PACKAGE_ROOTS" "$package_root"
   fi
 
-  if [[ "$class_name" == *Application ]] || grep -Eq '@SpringBootApplication|public[[:space:]]+static[[:space:]]+void[[:space:]]+main[[:space:]]*\(' "$path"; then
+  if [[ "$class_name" == *Application ]] || has_java_annotation "$path" 'SpringBootApplication' || grep -Eq 'public[[:space:]]+static[[:space:]]+void[[:space:]]+main[[:space:]]*\(' "$path"; then
     append_named_path "ENTRYPOINTS" "$class_name" "$path"
   fi
 
-  if [[ "$class_name" == *Controller ]] || grep -Eq '@RestController|@Controller' "$path"; then
+  if [[ "$class_name" == *Controller ]] || has_java_annotation "$path" 'RestController|Controller'; then
     append_named_path "CONTROLLERS" "$class_name" "$path"
   fi
 
@@ -249,15 +360,15 @@ classify_java_file() {
     append_named_path "FACADES" "$class_name" "$path"
   fi
 
-  if [[ "$class_name" == *Listener ]] || grep -Eq '@KafkaListener|@RabbitListener|@RocketMQMessageListener|@JmsListener' "$path"; then
+  if [[ "$class_name" == *Listener ]] || has_java_annotation "$path" 'KafkaListener|RabbitListener|RocketMQMessageListener|JmsListener'; then
     append_named_path "LISTENERS" "$class_name" "$path"
   fi
 
-  if [[ "$class_name" == *Job ]] || [[ "$class_name" == *Task ]] || grep -Eq '@Scheduled' "$path"; then
+  if [[ "$class_name" == *Job ]] || [[ "$class_name" == *Task ]] || has_java_annotation "$path" 'Scheduled'; then
     append_named_path "JOBS" "$class_name" "$path"
   fi
 
-  if [[ "$class_name" == *Client ]] || [[ "$class_name" == *Gateway ]] || [[ "$class_name" == *FeignClient ]] || grep -Eq '@FeignClient' "$path"; then
+  if [[ "$class_name" == *Client ]] || [[ "$class_name" == *Gateway ]] || [[ "$class_name" == *FeignClient ]] || has_java_annotation "$path" 'FeignClient'; then
     append_named_path "CLIENTS" "$class_name" "$path"
   fi
 
@@ -339,8 +450,9 @@ main() {
 
   parse_args "$@"
   detect_stack
-  require_java_repo
   discover_build_files
+  discover_source_roots
+  require_java_repo
   discover_config_files
   discover_java_inventory
 

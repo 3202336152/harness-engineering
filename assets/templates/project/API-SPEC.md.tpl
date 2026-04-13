@@ -17,7 +17,7 @@ template_language: {{TEMPLATE_LANGUAGE}}
 
 本文覆盖项目对外提供或消费的接口规范，适用于 REST、RPC、消息事件、回调接口等。
 对复杂 Java 服务，接口规范除了字段定义，还必须明确入口类、编排服务、幂等方式、错误码、联调样例和兼容策略。
-如果仓库存在 `.harness/runtime/java-doc-scan.json`，请先把其中的 `controllers`、`facades`、`listeners`、`jobs`、`clients` 全量枚举，再补协议细节。
+如果仓库存在 `harness/.harness/runtime/java-doc-scan.json`，请先把其中的 `controllers`、`facades`、`listeners`、`jobs`、`clients` 全量枚举，再补协议细节。
 
 ## 协议与接口类型
 
@@ -35,7 +35,7 @@ template_language: {{TEMPLATE_LANGUAGE}}
 
 | 接口名 | 协议 | 方向 | 调用方/消费方 | 主要用途 | 对应入口类 | 链接到详细文档 |
 |--------|------|------|---------------|----------|------------|----------------|
-| 例如：查询用户 | HTTP GET | 入站 | 前端/内部服务 | 用户详情查询 | `UserController` | `docs/features/.../接口设计.md` |
+| 例如：查询用户 | HTTP GET | 入站 | 前端/内部服务 | 用户详情查询 | `UserController` | `harness/docs/features/.../接口设计.md` |
 
 ## 通用报文与上下文
 

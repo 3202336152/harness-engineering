@@ -5,7 +5,7 @@ set -euo pipefail
 RUN_ID=""
 TASK=""
 FEATURE_ID=""
-POLICY_PATH=".harness/observability-policy.json"
+POLICY_PATH="harness/.harness/observability-policy.json"
 OUTPUT_DIR=""
 SUMMARY_FILE=""
 OUTPUT_JSON=0
@@ -40,22 +40,85 @@ append_array_json() {
 
 sanitize_id() {
   local value="$1"
-  value="${value// /-}"
-  value="${value//\//-}"
-  value="${value//\\/-}"
-  value="${value//:/-}"
-  value="${value//\"/-}"
+  value="$(printf '%s' "$value" | LC_ALL=C tr -c 'A-Za-z0-9._-' '-')"
+  while [[ "$value" == *--* ]]; do
+    value="${value//--/-}"
+  done
+  while [[ "$value" == -* ]]; do
+    value="${value#-}"
+  done
+  while [[ "$value" == *- ]]; do
+    value="${value%-}"
+  done
+  if [ -z "$value" ]; then
+    value="capture"
+  fi
   printf '%s' "$value"
 }
 
-run_capture_command() {
+base64_decode() {
+  local value="$1"
+  printf '%s' "$value" | { base64 --decode 2>/dev/null || base64 -D 2>/dev/null; }
+}
+
+command_is_plain_argv_compatible() {
+  local command="$1"
+  local stripped=""
+
+  [ -n "$command" ] || return 1
+  case "$command" in
+    *$'\n'*|*$'\r'*|*'&&'*|*'||'*|*'$('*|*'${'*)
+      return 1
+      ;;
+  esac
+
+  stripped="$(printf '%s' "$command" | LC_ALL=C tr -d 'A-Za-z0-9_./:=?, -')"
+  [ -z "$stripped" ]
+}
+
+command_string_to_argv_json() {
+  local command="$1"
+  local -a argv=()
+
+  command_is_plain_argv_compatible "$command" || return 1
+  read -r -a argv <<< "$command"
+  [ "${#argv[@]}" -gt 0 ] || return 1
+  printf '%s\n' "${argv[@]}" | jq -Rn '[inputs | select(length > 0)]'
+}
+
+reject_capture_command() {
   local capture_id="$1"
-  local command="$2"
+  local output_file="$2"
+  local message="$3"
+
+  printf '%s\n' "$message" > "$output_file"
+  COMMAND_RECORDS+=("$capture_id|rejected|$output_file|126")
+}
+
+run_capture_argv() {
+  local capture_id="$1"
+  local argv_json="$2"
   local output_file="$3"
   local status=0
+  local encoded=""
+  local arg=""
+  local -a argv=()
+
+  while IFS= read -r encoded; do
+    [ -n "$encoded" ] || continue
+    arg="$(base64_decode "$encoded")"
+    argv+=("$arg")
+  done <<EOF
+$(printf '%s' "$argv_json" | jq -r '.[]? | @base64')
+EOF
+
+  if [ "${#argv[@]}" -eq 0 ]; then
+    reject_capture_command "$capture_id" "$output_file" "Rejected unsafe capture command: argv is empty."
+    return
+  fi
 
   set +e
-  bash -lc "$command" > "$output_file" 2>&1
+  "${argv[@]}" > "$output_file" 2>&1
   status=$?
   set -e
 
@@ -64,6 +127,39 @@ run_capture_command() {
   else
     COMMAND_RECORDS+=("$capture_id|failed|$output_file|$status")
   fi
+}
+
+run_capture_entry() {
+  local entry_json="$1"
+  local output_dir="$2"
+  local capture_id=""
+  local output_file=""
+  local argv_json=""
+  local command=""
+
+  capture_id="$(printf '%s' "$entry_json" | jq -r '.id // ""')"
+  [ -n "$capture_id" ] || return 0
+
+  output_file="$output_dir/$(sanitize_id "$capture_id").txt"
+  argv_json="$(printf '%s' "$entry_json" | jq -c '(.argv // []) | if type == "array" then . else [] end')"
+
+  if [ "$argv_json" != "[]" ]; then
+    run_capture_argv "$capture_id" "$argv_json" "$output_file"
+    return
+  fi
+
+  command="$(printf '%s' "$entry_json" | jq -r '.command // ""')"
+  if [ -z "$command" ]; then
+    reject_capture_command "$capture_id" "$output_file" "Rejected unsafe capture command: missing argv or command."
+    return
+  fi
+
+  if ! argv_json="$(command_string_to_argv_json "$command" 2>/dev/null)"; then
+    reject_capture_command "$capture_id" "$output_file" "Rejected unsafe capture command. Use argv for quoted or shell-style commands."
+    return
+  fi
+
+  run_capture_argv "$capture_id" "$argv_json" "$output_file"
 }
 
 copy_capture_file() {
@@ -136,7 +232,7 @@ parse_args() {
   fi
 
   if [ -z "$OUTPUT_DIR" ]; then
-    OUTPUT_DIR=".harness/evidence/$RUN_ID"
+    OUTPUT_DIR="harness/.harness/evidence/$RUN_ID"
   fi
 }
 
@@ -267,18 +363,18 @@ main() {
     cp "$SUMMARY_FILE" "$OUTPUT_DIR/summary.json"
   fi
 
-  while IFS=$'\t' read -r capture_id command; do
-    [ -n "$capture_id" ] || continue
-    run_capture_command "$capture_id" "$command" "$commands_dir/$(sanitize_id "$capture_id").txt"
+  while IFS= read -r entry_json; do
+    [ -n "$entry_json" ] || continue
+    run_capture_entry "$entry_json" "$commands_dir"
   done <<EOF
-$(jq -r '.always_capture_commands[]? | [.id, .command] | @tsv' "$POLICY_PATH")
+$(jq -c '.always_capture_commands[]? | select((.id // "") != "")' "$POLICY_PATH")
 EOF
 
-  while IFS=$'\t' read -r capture_id command; do
-    [ -n "$capture_id" ] || continue
-    run_capture_command "$capture_id" "$command" "$commands_dir/$(sanitize_id "$capture_id").txt"
+  while IFS= read -r entry_json; do
+    [ -n "$entry_json" ] || continue
+    run_capture_entry "$entry_json" "$commands_dir"
   done <<EOF
-$(jq -r '.runtime_capture_commands[]? | select(.enabled == true and (.command // "") != "") | [.id, .command] | @tsv' "$POLICY_PATH")
+$(jq -c '.runtime_capture_commands[]? | select(.enabled == true and ((.argv // []) != [] or (.command // "") != "") and (.id // "") != "")' "$POLICY_PATH")
 EOF
 
   while IFS=$'\t' read -r capture_id source_path; do
@@ -289,7 +385,7 @@ EOF
 $(jq -r '.file_artifacts[]? | select(.enabled == true and (.path // "") != "") | [.id, .path] | @tsv' "$POLICY_PATH")
 EOF
 
-  if printf '%s\n' "${COMMAND_RECORDS[@]-}" | grep -q '|failed|'; then
+  if printf '%s\n' "${COMMAND_RECORDS[@]-}" | grep -Eq '\|(failed|rejected)\|'; then
     status="partial"
   fi
   if printf '%s\n' "${FILE_RECORDS[@]-}" | grep -q '|failed|'; then

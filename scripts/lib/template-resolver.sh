@@ -1,7 +1,7 @@
 #!/bin/bash
 
 : "${DEFAULT_TEMPLATE_ROOT:=}"
-: "${PROJECT_TEMPLATE_ROOT:=.harness/templates}"
+: "${PROJECT_TEMPLATE_ROOT:=harness/.harness/templates}"
 : "${USER_TEMPLATE_ROOT:=}"
 
 normalize_template_root() {
@@ -15,7 +15,7 @@ normalize_template_root() {
 init_template_resolver() {
   DEFAULT_TEMPLATE_ROOT="$(normalize_template_root "$1")"
   USER_TEMPLATE_ROOT="$(normalize_template_root "${2:-}")"
-  PROJECT_TEMPLATE_ROOT="$(normalize_template_root "${3:-.harness/templates}")"
+  PROJECT_TEMPLATE_ROOT="$(normalize_template_root "${3:-harness/.harness/templates}")"
 }
 
 resolve_template_file() {

@@ -16,38 +16,38 @@ bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2
 output=$(bash "$REPO_ROOT/scripts/new-feature-spec.sh" --id FEAT-001 --title "User Search" --owner alice --change-types api,db,rollout 2>&1)
 status=$?
 assert_success "$status" "feature spec command succeeds"
-assert_file_exists "docs/features/FEAT-001-user-search/功能概览.md"
-assert_file_exists "docs/features/FEAT-001-user-search/方案设计.md"
-assert_file_exists "docs/features/FEAT-001-user-search/接口设计.md"
-assert_file_exists "docs/features/FEAT-001-user-search/数据设计.md"
-assert_file_exists "docs/features/FEAT-001-user-search/测试方案.md"
-assert_file_exists "docs/features/FEAT-001-user-search/发布回滚.md"
-assert_file_exists "docs/features/FEAT-001-user-search/状态.md"
-assert_file_exists "docs/features/FEAT-001-user-search/manifest.json"
-assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "id: FEAT-001"
-assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "template_version: 1.1.0"
-assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "template_profile: generic"
-assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "doc_state: scaffold"
-assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "# 功能概览"
-assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "## 业务背景与目标"
-assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "## 当前现状与边界"
-assert_file_contains "docs/features/FEAT-001-user-search/功能概览.md" "## 上下游与依赖清单"
-assert_file_contains "docs/features/FEAT-001-user-search/方案设计.md" "## 当前代码挂点与拟改动类"
-assert_file_contains "docs/features/FEAT-001-user-search/方案设计.md" "## 主链路时序与处理步骤"
-assert_file_contains "docs/features/FEAT-001-user-search/接口设计.md" "## 接口清单"
-assert_file_contains "docs/features/FEAT-001-user-search/接口设计.md" "## 接口详细设计"
-assert_file_contains "docs/features/FEAT-001-user-search/数据设计.md" "## DDL 与结构变更"
-assert_file_contains "docs/features/FEAT-001-user-search/数据设计.md" "## 表与索引设计"
-assert_file_contains "docs/features/FEAT-001-user-search/测试方案.md" "# 测试方案"
-assert_file_contains "docs/features/FEAT-001-user-search/测试方案.md" "## 测试范围矩阵"
-assert_file_contains "docs/features/FEAT-001-user-search/测试方案.md" "## 回归命令与证据"
-assert_file_contains "docs/features/FEAT-001-user-search/发布回滚.md" "## 发布前检查"
-assert_file_contains "docs/features/FEAT-001-user-search/发布回滚.md" "## 发布后观测指标"
-assert_file_contains "docs/features/FEAT-001-user-search/状态.md" "## 当前状态"
-assert_file_contains "docs/features/FEAT-001-user-search/状态.md" "## 本轮实现与剩余项"
-assert_json_field "$(cat docs/features/FEAT-001-user-search/manifest.json)" ".feature_id" "FEAT-001"
-assert_json_field "$(cat docs/features/FEAT-001-user-search/manifest.json)" '.required_docs | index("发布回滚.md") != null' "true"
-assert_json_field "$(cat docs/features/FEAT-001-user-search/manifest.json)" ".rollback_required" "true"
+assert_file_exists "harness/docs/features/FEAT-001-user-search/功能概览.md"
+assert_file_exists "harness/docs/features/FEAT-001-user-search/方案设计.md"
+assert_file_exists "harness/docs/features/FEAT-001-user-search/接口设计.md"
+assert_file_exists "harness/docs/features/FEAT-001-user-search/数据设计.md"
+assert_file_exists "harness/docs/features/FEAT-001-user-search/测试方案.md"
+assert_file_exists "harness/docs/features/FEAT-001-user-search/发布回滚.md"
+assert_file_exists "harness/docs/features/FEAT-001-user-search/状态.md"
+assert_file_exists "harness/docs/features/FEAT-001-user-search/manifest.json"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/功能概览.md" "id: FEAT-001"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/功能概览.md" "template_version: 1.1.0"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/功能概览.md" "template_profile: generic"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/功能概览.md" "doc_state: scaffold"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/功能概览.md" "# 功能概览"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/功能概览.md" "## 业务背景与目标"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/功能概览.md" "## 当前现状与边界"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/功能概览.md" "## 上下游与依赖清单"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/方案设计.md" "## 当前代码挂点与拟改动类"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/方案设计.md" "## 主链路时序与处理步骤"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/接口设计.md" "## 接口清单"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/接口设计.md" "## 接口详细设计"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/数据设计.md" "## DDL 与结构变更"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/数据设计.md" "## 表与索引设计"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/测试方案.md" "# 测试方案"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/测试方案.md" "## 测试范围矩阵"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/测试方案.md" "## 回归命令与证据"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/发布回滚.md" "## 发布前检查"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/发布回滚.md" "## 发布后观测指标"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/状态.md" "## 当前状态"
+assert_file_contains "harness/docs/features/FEAT-001-user-search/状态.md" "## 本轮实现与剩余项"
+assert_json_field "$(cat harness/docs/features/FEAT-001-user-search/manifest.json)" ".feature_id" "FEAT-001"
+assert_json_field "$(cat harness/docs/features/FEAT-001-user-search/manifest.json)" '.required_docs | index("发布回滚.md") != null' "true"
+assert_json_field "$(cat harness/docs/features/FEAT-001-user-search/manifest.json)" ".rollback_required" "true"
 assert_json_field "$output" ".status" "success"
 assert_json_number_gte "$output" ".created_files | length" "8"
 teardown_test_dir
@@ -82,8 +82,8 @@ teardown_test_dir
 it "passes strict validation when required sections and metadata are complete"
 setup_test_dir
 init_git_repo
-mkdir -p .harness/runtime docs/project docs/features/FEAT-100-custom
-cat > .harness/spec-policy.json <<'EOF'
+mkdir -p harness/.harness/runtime harness/docs/project harness/docs/features/FEAT-100-custom
+cat > harness/.harness/spec-policy.json <<'EOF'
 {
   "template_pack": {
     "name": "custom-pack",
@@ -99,14 +99,14 @@ cat > .harness/spec-policy.json <<'EOF'
   "project_docs": [
     {
       "id": "architecture",
-      "path": "docs/project/ARCHITECTURE.md",
+      "path": "harness/docs/project/ARCHITECTURE.md",
       "required": true,
       "required_frontmatter": ["template_version", "template_profile"],
       "required_sections": ["## 系统上下文", "## 事务边界与一致性"]
     }
   ],
   "feature_spec": {
-    "base_dir": "docs/features",
+    "base_dir": "harness/docs/features",
     "required_docs": ["overview.md"],
     "doc_rules": {
       "overview.md": {
@@ -117,7 +117,7 @@ cat > .harness/spec-policy.json <<'EOF'
   }
 }
 EOF
-cat > .harness/runtime/java-doc-scan.json <<'EOF'
+cat > harness/.harness/runtime/java-doc-scan.json <<'EOF'
 {
   "status": "success",
   "stack": "java-maven",
@@ -133,7 +133,7 @@ cat > .harness/runtime/java-doc-scan.json <<'EOF'
   }
 }
 EOF
-cat > docs/project/ARCHITECTURE.md <<'EOF'
+cat > harness/docs/project/ARCHITECTURE.md <<'EOF'
 ---
 id: project-architecture
 title: 项目架构
@@ -156,7 +156,7 @@ template_profile: java-backend-service
 
 下单事务仅覆盖订单落库，消息通过 outbox 异步发送。
 EOF
-cat > docs/features/FEAT-100-custom/overview.md <<'EOF'
+cat > harness/docs/features/FEAT-100-custom/overview.md <<'EOF'
 ---
 id: FEAT-100
 title: 自定义能力
@@ -191,8 +191,8 @@ teardown_test_dir
 it "fails strict validation when java scan inventory is not reflected in project docs"
 setup_test_dir
 init_git_repo
-mkdir -p .harness/runtime docs/project
-cat > .harness/spec-policy.json <<'EOF'
+mkdir -p harness/.harness/runtime harness/docs/project
+cat > harness/.harness/spec-policy.json <<'EOF'
 {
   "template_pack": {
     "name": "custom-pack",
@@ -208,33 +208,33 @@ cat > .harness/spec-policy.json <<'EOF'
   "project_docs": [
     {
       "id": "architecture",
-      "path": "docs/project/项目架构.md",
+      "path": "harness/docs/project/项目架构.md",
       "required": true,
       "required_frontmatter": ["template_version", "template_profile"],
       "required_sections": ["## 系统上下文", "## 模块清单与职责", "## 分层与包结构", "## 事务边界与一致性"]
     },
     {
       "id": "design",
-      "path": "docs/project/项目设计.md",
+      "path": "harness/docs/project/项目设计.md",
       "required": true,
       "required_frontmatter": ["template_version", "template_profile"],
       "required_sections": ["## 设计目标", "## 当前代码挂点与职责分工"]
     },
     {
       "id": "api-spec",
-      "path": "docs/project/接口规范.md",
+      "path": "harness/docs/project/接口规范.md",
       "required": true,
       "required_frontmatter": ["template_version", "template_profile"],
       "required_sections": ["## 协议与接口类型", "## 接口清单"]
     }
   ],
   "feature_spec": {
-    "base_dir": "docs/features",
+    "base_dir": "harness/docs/features",
     "required_docs": []
   }
 }
 EOF
-cat > .harness/runtime/java-doc-scan.json <<'EOF'
+cat > harness/.harness/runtime/java-doc-scan.json <<'EOF'
 {
   "status": "success",
   "stack": "java-maven",
@@ -250,7 +250,7 @@ cat > .harness/runtime/java-doc-scan.json <<'EOF'
   }
 }
 EOF
-cat > docs/project/项目架构.md <<'EOF'
+cat > harness/docs/project/项目架构.md <<'EOF'
 ---
 id: project-architecture
 title: 项目架构
@@ -281,7 +281,7 @@ template_profile: java-backend-service
 
 本地事务提交后异步发消息。
 EOF
-cat > docs/project/项目设计.md <<'EOF'
+cat > harness/docs/project/项目设计.md <<'EOF'
 ---
 id: project-design
 title: 项目设计
@@ -304,7 +304,7 @@ template_profile: java-backend-service
 
 这里只写接口层和服务层，没有真实类名。
 EOF
-cat > docs/project/接口规范.md <<'EOF'
+cat > harness/docs/project/接口规范.md <<'EOF'
 ---
 id: project-api-spec
 title: 项目接口规范
@@ -341,8 +341,8 @@ teardown_test_dir
 it "passes strict validation when java scan inventory is covered by project docs"
 setup_test_dir
 init_git_repo
-mkdir -p .harness/runtime docs/project
-cat > .harness/spec-policy.json <<'EOF'
+mkdir -p harness/.harness/runtime harness/docs/project
+cat > harness/.harness/spec-policy.json <<'EOF'
 {
   "template_pack": {
     "name": "custom-pack",
@@ -358,33 +358,33 @@ cat > .harness/spec-policy.json <<'EOF'
   "project_docs": [
     {
       "id": "architecture",
-      "path": "docs/project/项目架构.md",
+      "path": "harness/docs/project/项目架构.md",
       "required": true,
       "required_frontmatter": ["template_version", "template_profile"],
       "required_sections": ["## 系统上下文", "## 模块清单与职责", "## 分层与包结构", "## 事务边界与一致性"]
     },
     {
       "id": "design",
-      "path": "docs/project/项目设计.md",
+      "path": "harness/docs/project/项目设计.md",
       "required": true,
       "required_frontmatter": ["template_version", "template_profile"],
       "required_sections": ["## 设计目标", "## 当前代码挂点与职责分工"]
     },
     {
       "id": "api-spec",
-      "path": "docs/project/接口规范.md",
+      "path": "harness/docs/project/接口规范.md",
       "required": true,
       "required_frontmatter": ["template_version", "template_profile"],
       "required_sections": ["## 协议与接口类型", "## 接口清单"]
     }
   ],
   "feature_spec": {
-    "base_dir": "docs/features",
+    "base_dir": "harness/docs/features",
     "required_docs": []
   }
 }
 EOF
-cat > .harness/runtime/java-doc-scan.json <<'EOF'
+cat > harness/.harness/runtime/java-doc-scan.json <<'EOF'
 {
   "status": "success",
   "stack": "java-maven",
@@ -400,7 +400,7 @@ cat > .harness/runtime/java-doc-scan.json <<'EOF'
   }
 }
 EOF
-cat > docs/project/项目架构.md <<'EOF'
+cat > harness/docs/project/项目架构.md <<'EOF'
 ---
 id: project-architecture
 title: 项目架构
@@ -431,7 +431,7 @@ template_profile: java-backend-service
 
 本地事务提交后异步发消息，外部支付走 PaymentClient。
 EOF
-cat > docs/project/项目设计.md <<'EOF'
+cat > harness/docs/project/项目设计.md <<'EOF'
 ---
 id: project-design
 title: 项目设计
@@ -454,7 +454,7 @@ template_profile: java-backend-service
 
 `OrderApplicationService` 编排主流程，`OrderDomainService` 承担核心规则。
 EOF
-cat > docs/project/接口规范.md <<'EOF'
+cat > harness/docs/project/接口规范.md <<'EOF'
 ---
 id: project-api-spec
 title: 项目接口规范
@@ -487,8 +487,8 @@ teardown_test_dir
 it "detects English placeholder markers in strict mode"
 setup_test_dir
 init_git_repo
-mkdir -p .harness docs/project docs/features/FEAT-101-placeholder
-cat > .harness/spec-policy.json <<'EOF'
+mkdir -p harness/.harness harness/docs/project harness/docs/features/FEAT-101-placeholder
+cat > harness/.harness/spec-policy.json <<'EOF'
 {
   "template_pack": {
     "name": "custom-pack",
@@ -504,14 +504,14 @@ cat > .harness/spec-policy.json <<'EOF'
   "project_docs": [
     {
       "id": "architecture",
-      "path": "docs/project/ARCHITECTURE.md",
+      "path": "harness/docs/project/ARCHITECTURE.md",
       "required": true,
       "required_frontmatter": ["template_version", "template_profile"],
       "required_sections": ["## 系统上下文", "## 事务边界与一致性"]
     }
   ],
   "feature_spec": {
-    "base_dir": "docs/features",
+    "base_dir": "harness/docs/features",
     "required_docs": ["overview.md"],
     "doc_rules": {
       "overview.md": {
@@ -522,7 +522,7 @@ cat > .harness/spec-policy.json <<'EOF'
   }
 }
 EOF
-cat > docs/project/ARCHITECTURE.md <<'EOF'
+cat > harness/docs/project/ARCHITECTURE.md <<'EOF'
 ---
 id: project-architecture
 title: 项目架构
@@ -545,7 +545,7 @@ template_profile: generic
 
 下单事务仅覆盖订单落库，消息通过 outbox 异步发送。
 EOF
-cat > docs/features/FEAT-101-placeholder/overview.md <<'EOF'
+cat > harness/docs/features/FEAT-101-placeholder/overview.md <<'EOF'
 ---
 id: FEAT-101
 title: Placeholder Check
@@ -582,7 +582,7 @@ setup_test_dir
 init_git_repo
 bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
 bash "$REPO_ROOT/scripts/new-feature-spec.sh" --id FEAT-003 --title "Search Filters" --owner carol --change-types api >/dev/null 2>&1
-rm "docs/features/FEAT-003-search-filters/接口设计.md"
+rm "harness/docs/features/FEAT-003-search-filters/接口设计.md"
 output=$(bash "$REPO_ROOT/scripts/validate-spec.sh" --json 2>&1)
 status=$?
 assert_eq "1" "$status" "spec validation fails when required docs are missing"
@@ -595,13 +595,13 @@ setup_test_dir
 init_git_repo
 bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
 bash "$REPO_ROOT/scripts/new-feature-spec.sh" --id FEAT-006 --title "Order Query" --owner frank --change-types api >/dev/null 2>&1
-rm "docs/features/FEAT-006-order-query/接口设计.md"
-output=$(bash "$REPO_ROOT/scripts/validate-spec.sh" --json --write-fix-plan .harness/fix-plan.json 2>&1)
+rm "harness/docs/features/FEAT-006-order-query/接口设计.md"
+output=$(bash "$REPO_ROOT/scripts/validate-spec.sh" --json --write-fix-plan harness/.harness/fix-plan.json 2>&1)
 status=$?
 assert_eq "1" "$status" "spec validation still fails before autofix"
-assert_file_exists ".harness/fix-plan.json"
-assert_json_field "$(cat .harness/fix-plan.json)" ".status" "planned"
-assert_json_field "$(cat .harness/fix-plan.json)" ".actions[0].action" "create_feature_doc"
+assert_file_exists "harness/.harness/fix-plan.json"
+assert_json_field "$(cat harness/.harness/fix-plan.json)" ".status" "planned"
+assert_json_field "$(cat harness/.harness/fix-plan.json)" ".actions[0].action" "create_feature_doc"
 teardown_test_dir
 
 it "autofix-safe recreates missing feature docs from templates"
@@ -609,11 +609,11 @@ setup_test_dir
 init_git_repo
 bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
 bash "$REPO_ROOT/scripts/new-feature-spec.sh" --id FEAT-007 --title "Order Query" --owner grace --change-types api >/dev/null 2>&1
-rm "docs/features/FEAT-007-order-query/接口设计.md"
+rm "harness/docs/features/FEAT-007-order-query/接口设计.md"
 output=$(bash "$REPO_ROOT/scripts/validate-spec.sh" --json --autofix-safe 2>&1)
 status=$?
 assert_success "$status" "autofix-safe succeeds for missing feature docs"
-assert_file_exists "docs/features/FEAT-007-order-query/接口设计.md"
+assert_file_exists "harness/docs/features/FEAT-007-order-query/接口设计.md"
 assert_json_field "$output" ".status" "passed"
 assert_json_number_gte "$output" ".autofix_count" "1"
 teardown_test_dir
@@ -638,19 +638,19 @@ bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2
 output=$(bash "$REPO_ROOT/scripts/new-feature-spec.sh" --id FEAT-004 --title "用户 搜索" --owner dora --change-types api 2>&1)
 status=$?
 assert_success "$status" "feature spec command succeeds for Chinese title"
-assert_file_exists "docs/features/FEAT-004-用户-搜索/功能概览.md"
-assert_file_exists "docs/features/FEAT-004-用户-搜索/接口设计.md"
-assert_file_exists "docs/features/FEAT-004-用户-搜索/manifest.json"
-assert_file_contains "docs/features/FEAT-004-用户-搜索/功能概览.md" "title: 用户 搜索"
-assert_json_field "$output" ".feature_dir" "docs/features/FEAT-004-用户-搜索"
+assert_file_exists "harness/docs/features/FEAT-004-用户-搜索/功能概览.md"
+assert_file_exists "harness/docs/features/FEAT-004-用户-搜索/接口设计.md"
+assert_file_exists "harness/docs/features/FEAT-004-用户-搜索/manifest.json"
+assert_file_contains "harness/docs/features/FEAT-004-用户-搜索/功能概览.md" "title: 用户 搜索"
+assert_json_field "$output" ".feature_dir" "harness/docs/features/FEAT-004-用户-搜索"
 teardown_test_dir
 
 it "uses project-local template overrides for feature specs"
 setup_test_dir
 init_git_repo
 bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
-mkdir -p .harness/templates/feature
-cat > .harness/templates/feature/overview.md.tpl <<'EOF'
+mkdir -p harness/.harness/templates/feature
+cat > harness/.harness/templates/feature/overview.md.tpl <<'EOF'
 ---
 id: {{FEATURE_ID}}
 title: {{FEATURE_TITLE}}
@@ -670,8 +670,8 @@ EOF
 output=$(bash "$REPO_ROOT/scripts/new-feature-spec.sh" --id FEAT-005 --title "Custom Search" --owner erin --change-types api 2>&1)
 status=$?
 assert_success "$status" "feature spec command succeeds with project template override"
-assert_file_contains "docs/features/FEAT-005-custom-search/功能概览.md" "# 自定义功能概览"
-assert_file_contains "docs/features/FEAT-005-custom-search/功能概览.md" "团队定制字段"
+assert_file_contains "harness/docs/features/FEAT-005-custom-search/功能概览.md" "# 自定义功能概览"
+assert_file_contains "harness/docs/features/FEAT-005-custom-search/功能概览.md" "团队定制字段"
 teardown_test_dir
 
 print_summary

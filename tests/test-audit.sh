@@ -8,7 +8,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$REPO_ROOT/tests/test-helpers.sh"
 
 seed_full_harness_project() {
-  mkdir -p docs/design-docs .harness/exec-plans/active .harness/exec-plans/completed .github/workflows scripts tests
+  mkdir -p harness/docs/project harness/.harness/exec-plans/active harness/.harness/exec-plans/completed .github/workflows scripts tests
   cat > AGENTS.md <<'EOF'
 # Sample Project
 
@@ -28,7 +28,7 @@ Layered service architecture.
 Keep docs updated.
 EOF
   cp AGENTS.md CLAUDE.md
-  cat > docs/ARCHITECTURE.md <<'EOF'
+  cat > harness/docs/project/ARCHITECTURE.md <<'EOF'
 # Architecture
 
 Layered model with dependency boundaries.
@@ -37,33 +37,33 @@ Dependencies flow one way.
 
 Boundary checks are enforced in CI.
 EOF
-  cat > docs/CONVENTIONS.md <<'EOF'
+  cat > harness/docs/project/DEVELOPMENT.md <<'EOF'
 # Conventions
 
 Follow shared utilities first.
 
 Files use kebab-case.
 EOF
-  cat > docs/TESTING.md <<'EOF'
+  cat > harness/docs/project/TESTING.md <<'EOF'
 # Testing
 
 Use npm test for verification.
 
 Coverage is tracked in CI.
 EOF
-  cat > docs/SECURITY.md <<'EOF'
+  cat > harness/docs/project/SECURITY.md <<'EOF'
 # Security
 
 Secrets stay in environment variables.
 
 .env files are ignored.
 EOF
-  cat > docs/design-docs/core-beliefs.md <<'EOF'
+  cat > harness/docs/project/core-beliefs.md <<'EOF'
 # Core Beliefs
 
 Architecture choices require team review.
 EOF
-  cat > .harness/exec-plans/active/sample-plan.md <<'EOF'
+  cat > harness/.harness/exec-plans/active/sample-plan.md <<'EOF'
 # Execution Plan
 
 Active plan placeholder.
@@ -102,7 +102,7 @@ EOF
 }
 
 seed_project_level_spec_project() {
-  mkdir -p docs/project docs/features/FEAT-010-checkout-rewrite .github/workflows scripts tests .harness
+  mkdir -p harness/docs/project harness/docs/features/FEAT-010-checkout-rewrite .github/workflows scripts tests harness/.harness
   cat > AGENTS.md <<'EOF'
 # Sample Project
 
@@ -114,13 +114,13 @@ npm test
 
 ## Architecture
 
-See docs/project/ARCHITECTURE.md.
+See harness/docs/project/项目架构.md.
 
 ## Constraints
 
 Keep specs and docs updated.
 EOF
-  cat > docs/project/ARCHITECTURE.md <<'EOF'
+  cat > harness/docs/project/ARCHITECTURE.md <<'EOF'
 ---
 id: project-architecture
 title: Project Architecture
@@ -134,7 +134,7 @@ last_updated: 2026-04-07
 
 Boundary rules and layered model live here.
 EOF
-  cat > docs/project/DEVELOPMENT.md <<'EOF'
+  cat > harness/docs/project/DEVELOPMENT.md <<'EOF'
 ---
 id: project-development
 title: Project Development
@@ -148,7 +148,7 @@ last_updated: 2026-04-07
 
 Conventions and review expectations live here.
 EOF
-  cat > docs/project/TESTING.md <<'EOF'
+  cat > harness/docs/project/TESTING.md <<'EOF'
 ---
 id: project-testing
 title: Project Testing
@@ -162,7 +162,7 @@ last_updated: 2026-04-07
 
 Use npm test and keep verification in CI.
 EOF
-  cat > docs/project/SECURITY.md <<'EOF'
+  cat > harness/docs/project/SECURITY.md <<'EOF'
 ---
 id: project-security
 title: Project Security
@@ -176,16 +176,16 @@ last_updated: 2026-04-07
 
 Security guidance lives here.
 EOF
-  cat > .harness/spec-policy.json <<'EOF'
+  cat > harness/.harness/spec-policy.json <<'EOF'
 {
   "project_docs": [
-    { "id": "architecture", "path": "docs/project/ARCHITECTURE.md", "required": true },
-    { "id": "development", "path": "docs/project/DEVELOPMENT.md", "required": true },
-    { "id": "testing", "path": "docs/project/TESTING.md", "required": true },
-    { "id": "security", "path": "docs/project/SECURITY.md", "required": true }
+    { "id": "architecture", "path": "harness/docs/project/ARCHITECTURE.md", "required": true },
+    { "id": "development", "path": "harness/docs/project/DEVELOPMENT.md", "required": true },
+    { "id": "testing", "path": "harness/docs/project/TESTING.md", "required": true },
+    { "id": "security", "path": "harness/docs/project/SECURITY.md", "required": true }
   ],
   "feature_spec": {
-    "base_dir": "docs/features",
+    "base_dir": "harness/docs/features",
     "required_docs": ["overview.md", "design.md", "test-spec.md", "status.md"],
     "change_type_docs": {
       "api": ["api-spec.md"]
@@ -193,7 +193,7 @@ EOF
   }
 }
 EOF
-  cat > docs/features/FEAT-010-checkout-rewrite/overview.md <<'EOF'
+  cat > harness/docs/features/FEAT-010-checkout-rewrite/overview.md <<'EOF'
 ---
 id: FEAT-010
 title: Checkout Rewrite
@@ -206,7 +206,7 @@ last_updated: 2026-04-07
 
 # Feature Overview
 EOF
-  cat > docs/features/FEAT-010-checkout-rewrite/design.md <<'EOF'
+  cat > harness/docs/features/FEAT-010-checkout-rewrite/design.md <<'EOF'
 ---
 id: FEAT-010
 title: Checkout Rewrite
@@ -219,7 +219,7 @@ last_updated: 2026-04-07
 
 # Feature Design
 EOF
-  cat > docs/features/FEAT-010-checkout-rewrite/test-spec.md <<'EOF'
+  cat > harness/docs/features/FEAT-010-checkout-rewrite/test-spec.md <<'EOF'
 ---
 id: FEAT-010
 title: Checkout Rewrite
@@ -232,7 +232,7 @@ last_updated: 2026-04-07
 
 # Feature Test Spec
 EOF
-  cat > docs/features/FEAT-010-checkout-rewrite/status.md <<'EOF'
+  cat > harness/docs/features/FEAT-010-checkout-rewrite/status.md <<'EOF'
 ---
 id: FEAT-010
 title: Checkout Rewrite
@@ -245,7 +245,7 @@ last_updated: 2026-04-07
 
 # Feature Status
 EOF
-  cat > docs/features/FEAT-010-checkout-rewrite/api-spec.md <<'EOF'
+  cat > harness/docs/features/FEAT-010-checkout-rewrite/api-spec.md <<'EOF'
 ---
 id: FEAT-010
 title: Checkout Rewrite
@@ -352,11 +352,11 @@ git commit -m "seed project spec structure" --quiet >/dev/null 2>&1
 output=$(bash "$REPO_ROOT/scripts/audit-harness.sh" 2>&1)
 status=$?
 assert_success "$status" "audit command succeeds and writes snapshot"
-assert_file_exists ".harness/runtime/last-audit.json"
-assert_json_field "$output" ".snapshot_path" ".harness/runtime/last-audit.json"
-assert_json_field "$(cat .harness/runtime/last-audit.json)" ".status" "completed"
-assert_json_field "$(cat .harness/runtime/last-audit.json)" '.last_run_at != null' "true"
-assert_json_number_gte "$(cat .harness/runtime/last-audit.json)" ".overall_score" "0"
+assert_file_exists "harness/.harness/runtime/last-audit.json"
+assert_json_field "$output" ".snapshot_path" "harness/.harness/runtime/last-audit.json"
+assert_json_field "$(cat harness/.harness/runtime/last-audit.json)" ".status" "completed"
+assert_json_field "$(cat harness/.harness/runtime/last-audit.json)" '.last_run_at != null' "true"
+assert_json_number_gte "$(cat harness/.harness/runtime/last-audit.json)" ".overall_score" "0"
 teardown_test_dir
 
 it "surfaces line-count warnings for oversized entry documents"
@@ -398,15 +398,15 @@ teardown_test_dir
 it "checks context policy presence and budget in documentation structure"
 setup_test_dir
 init_git_repo
-mkdir -p docs/project .harness
-cat > docs/project/ARCHITECTURE.md <<'EOF'
+mkdir -p harness/docs/project harness/.harness
+cat > harness/docs/project/ARCHITECTURE.md <<'EOF'
 # 项目架构
 
 ## 系统上下文
 
 订单服务负责订单创建。
 EOF
-cat > .harness/context-policy.json <<'EOF'
+cat > harness/.harness/context-policy.json <<'EOF'
 {
   "version": "1.0.0",
   "max_context_files": 12
@@ -416,8 +416,63 @@ output=$(bash "$REPO_ROOT/scripts/audit-harness.sh" 2>&1)
 status=$?
 assert_success "$status" "audit command succeeds with context policy"
 assert_json_field "$output" ".dimensions.doc_structure.score" "30"
-assert_json_field "$output" '.dimensions.doc_structure.details | index(".harness/context-policy.json found") != null' "true"
+assert_json_field "$output" '.dimensions.doc_structure.details | index("harness/.harness/context-policy.json found") != null' "true"
 assert_json_field "$output" '.dimensions.doc_structure.details | index("Context budget configured (max 12 files)") != null' "true"
+teardown_test_dir
+
+it "recognizes Java test sources and Java CI commands in audit scoring"
+setup_test_dir
+init_git_repo
+mkdir -p src/test/java/com/example/order .github/workflows
+cat > pom.xml <<'EOF'
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>order-app</artifactId>
+  <version>1.0.0</version>
+</project>
+EOF
+cat > src/test/java/com/example/order/OrderServiceTest.java <<'EOF'
+package com.example.order;
+
+import org.junit.jupiter.api.Test;
+
+public class OrderServiceTest {
+  @Test
+  void works() {}
+}
+EOF
+cat > .github/workflows/ci.yml <<'EOF'
+name: CI
+jobs:
+  test:
+    steps:
+      - run: ./mvnw clean test
+EOF
+output=$(bash "$REPO_ROOT/scripts/audit-harness.sh" 2>&1)
+status=$?
+assert_success "$status" "audit command succeeds on Java test project"
+assert_json_number_gte "$output" ".dimensions.test_coverage.score" "80"
+assert_json_field "$output" '.dimensions.test_coverage.details | index("Test command configured") != null' "true"
+assert_json_field "$output" '.dimensions.test_coverage.details | index("Test files or directories found") != null' "true"
+assert_json_field "$output" '.dimensions.test_coverage.details | index("Tests run in CI") != null' "true"
+teardown_test_dir
+
+it "tracks stale docs whose file names contain spaces"
+setup_test_dir
+init_git_repo
+mkdir -p harness/docs/project
+cat > "harness/docs/project/项目 架构 v2.md" <<'EOF'
+# 项目架构
+
+旧文档。
+EOF
+git add -A >/dev/null 2>&1
+GIT_AUTHOR_DATE="2025-01-01T00:00:00Z" GIT_COMMITTER_DATE="2025-01-01T00:00:00Z" git commit -m "old spaced doc" --quiet >/dev/null 2>&1
+output=$(bash "$REPO_ROOT/scripts/audit-harness.sh" 2>&1)
+status=$?
+assert_success "$status" "audit handles spaced markdown paths"
+assert_json_field "$output" '.dimensions.doc_freshness.details | map(select(startswith("harness/docs/project/项目 架构 v2.md is stale"))) | length > 0' "true"
 teardown_test_dir
 
 print_summary

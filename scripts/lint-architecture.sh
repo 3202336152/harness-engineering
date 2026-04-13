@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-CONFIG_PATH=".harness/architecture.json"
+CONFIG_PATH="harness/.harness/architecture.json"
 
 json_escape() {
   local text="$1"
@@ -85,7 +85,10 @@ EOF
 
 path_layer() {
   local path="$1"
+  local normalized=""
   local layer
+
+  normalized="$(printf '%s' "$path" | sed 's#[/\\]#.#g')"
   for layer in $LAYERS; do
     case "$path" in
       *"/$layer/"*|*"../$layer/"*|*"./$layer/"*)
@@ -93,7 +96,81 @@ path_layer() {
         return
         ;;
     esac
+    case "$normalized" in
+      "$layer"|*".$layer"|"$layer".*|*".$layer".*)
+        printf '%s' "$layer"
+        return
+        ;;
+    esac
   done
+}
+
+path_domain() {
+  local path="$1"
+  local normalized=""
+  local segments=()
+  local index=0
+  local layer=""
+
+  normalized="$(printf '%s' "$path" | sed 's#[/\\]#.#g')"
+  IFS='.' read -r -a segments <<< "$normalized"
+  for index in "${!segments[@]}"; do
+    for layer in $LAYERS; do
+      if [ "${segments[$index]}" = "$layer" ]; then
+        if [ "$index" -gt 0 ] && [ -n "${segments[$((index - 1))]}" ] && [ "${segments[$((index - 1))]}" != ".." ]; then
+          printf '%s' "${segments[$((index - 1))]}"
+        fi
+        return
+      fi
+    done
+  done
+}
+
+java_package_name() {
+  local file="$1"
+  awk '
+    /^[[:space:]]*package[[:space:]]+/ {
+      line=$0
+      sub(/^[[:space:]]*package[[:space:]]+/, "", line)
+      sub(/;[[:space:]]*$/, "", line)
+      print line
+      exit
+    }
+  ' "$file"
+}
+
+file_layer() {
+  local file="$1"
+  local relative_file=""
+  local package_name=""
+
+  if [[ "$file" == *.java ]]; then
+    package_name="$(java_package_name "$file")"
+    if [ -n "$package_name" ]; then
+      path_layer "$package_name"
+      return
+    fi
+  fi
+
+  relative_file="${file#"$SRC_ROOT_PREFIX"}"
+  path_layer "$relative_file"
+}
+
+file_domain() {
+  local file="$1"
+  local relative_file=""
+  local package_name=""
+
+  if [[ "$file" == *.java ]]; then
+    package_name="$(java_package_name "$file")"
+    if [ -n "$package_name" ]; then
+      path_domain "$package_name"
+      return
+    fi
+  fi
+
+  relative_file="${file#"$SRC_ROOT_PREFIX"}"
+  path_domain "$relative_file"
 }
 
 record_violation() {
@@ -122,12 +199,13 @@ check_file() {
   local line_number
   local import_path
   local target_layer
+  local target_domain
   local current_index
   local target_index
 
   relative_file="${file#"$SRC_ROOT_PREFIX"}"
-  domain="${relative_file%%/*}"
-  current_layer="$(printf '%s' "$relative_file" | cut -d/ -f2)"
+  domain="$(file_domain "$file")"
+  current_layer="$(file_layer "$file")"
   current_index="$(layer_index "$current_layer")"
   if [ "$current_index" -lt 0 ]; then
     return
@@ -138,6 +216,7 @@ check_file() {
     line_number="${import_line%%|*}"
     import_path="${import_line#*|}"
     target_layer="$(path_layer "$import_path")"
+    target_domain="$(path_domain "$import_path")"
     if [ -z "$target_layer" ]; then
       continue
     fi
@@ -170,7 +249,7 @@ check_file() {
         "Move shared contracts downward or invert the dependency with an interface."
     fi
 
-    if printf '%s' "$import_path" | grep -Eq '/src/[^/]+/' && ! printf '%s' "$import_path" | grep -Eq "/src/$domain/"; then
+    if [ -n "$domain" ] && [ -n "$target_domain" ] && [ "$domain" != "$target_domain" ]; then
       record_violation \
         "$file" \
         "$line_number" \
@@ -185,7 +264,15 @@ $(awk '
   {
     line=$0
     path=""
-    if (match(line, /from[[:space:]]*["\047][^"\047]+["\047]/)) {
+    if (match(line, /^[[:space:]]*import[[:space:]]+static[[:space:]]+[A-Za-z0-9_.]+[[:space:]]*;/)) {
+      path=substr(line, RSTART, RLENGTH)
+      sub(/^[[:space:]]*import[[:space:]]+static[[:space:]]+/, "", path)
+      sub(/[[:space:]]*;[[:space:]]*$/, "", path)
+    } else if (match(line, /^[[:space:]]*import[[:space:]]+[A-Za-z0-9_.]+[[:space:]]*;/)) {
+      path=substr(line, RSTART, RLENGTH)
+      sub(/^[[:space:]]*import[[:space:]]+/, "", path)
+      sub(/[[:space:]]*;[[:space:]]*$/, "", path)
+    } else if (match(line, /from[[:space:]]*["\047][^"\047]+["\047]/)) {
       path=substr(line, RSTART, RLENGTH)
       sub(/^from[[:space:]]*["\047]/, "", path)
       sub(/["\047]$/, "", path)

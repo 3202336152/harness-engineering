@@ -70,7 +70,7 @@ template_language: {{TEMPLATE_LANGUAGE}}
 - 优先复用共享能力，避免重复实现。
 - 保持文件聚焦且易读。
 - 每次有意义的改动都同步更新 spec、文档和测试。
-- 接口、数据库、安全、配置、部署相关改动，应满足 `.harness/doc-impact-rules.json` 中的文档联动要求。
+- 接口、数据库、安全、配置、部署相关改动，应满足 `harness/.harness/doc-impact-rules.json` 中的文档联动要求。
 - Controller/Listener/Job 不承载核心业务规则。
 - 禁止跨领域直接读取不属于自己的底表或私有实现。
 - 不为“先跑通”牺牲分层、命名和事务边界。

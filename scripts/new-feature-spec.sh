@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-CONFIG_PATH=".harness/spec-policy.json"
+CONFIG_PATH="harness/.harness/spec-policy.json"
 FEATURE_ID=""
 TITLE=""
 OWNER="team"
@@ -383,7 +383,7 @@ main() {
 
   parse_args "$@"
   require_jq
-  init_template_resolver "$DEFAULT_TEMPLATES_DIR" "$USER_TEMPLATE_ROOT" ".harness/templates"
+  init_template_resolver "$DEFAULT_TEMPLATES_DIR" "$USER_TEMPLATE_ROOT" "harness/.harness/templates"
 
   if [ ! -f "$CONFIG_PATH" ]; then
     printf '{"status":"error","error":"Missing spec policy: %s"}\n' "$(json_escape "$CONFIG_PATH")"
@@ -391,7 +391,7 @@ main() {
   fi
 
   load_template_pack_metadata
-  feature_base_dir="$(jq -r '.feature_spec.base_dir // "docs/features"' "$CONFIG_PATH")"
+  feature_base_dir="$(jq -r '.feature_spec.base_dir // "harness/docs/features"' "$CONFIG_PATH")"
   load_required_docs
   load_related_project_docs
   load_verification_checks

@@ -17,7 +17,7 @@ template_language: {{TEMPLATE_LANGUAGE}}
 
 本文是项目级共享架构基线，面向开发、评审、测试、运维和 AI 代理。
 对于复杂后端项目，这份文档必须优先讲清楚当前系统的模块边界、主链路、关键表、消息链路、事务边界和排障入口，而不是只写抽象原则。Java/Spring 项目可直接按这里的分层与落点补充真实实现。
-如果仓库存在 `.harness/runtime/java-doc-scan.json`，请先用其中的 `module_paths`、`package_roots`、`entrypoints` 校对本文，再补正文细节。
+如果仓库存在 `harness/.harness/runtime/java-doc-scan.json`，请先用其中的 `module_paths`、`package_roots`、`entrypoints` 校对本文，再补正文细节。
 
 ## 当前模板画像
 
@@ -102,7 +102,7 @@ interfaces -> application -> domain
 infrastructure -> domain
 ```
 
-如果项目不是 Java DDD 分层，也应把真实依赖流向同步写入 `.harness/architecture.json`，并确保文档说明与机械化校验配置一致。
+如果项目不是 Java DDD 分层，也应把真实依赖流向同步写入 `harness/.harness/architecture.json`，并确保文档说明与机械化校验配置一致。
 
 ## 核心链路与时序
 
@@ -205,7 +205,7 @@ infrastructure -> domain
 ## 安全与合规边界
 
 记录接口鉴权、数据脱敏、权限校验、操作审计、敏感配置管理的统一原则，
-并链接到 `docs/project/安全规范.md` 的详细要求。
+并链接到 `harness/docs/project/安全规范.md` 的详细要求。
 
 ## 架构演进与文档同步要求
 
@@ -215,7 +215,7 @@ infrastructure -> domain
 
 ## 机械化约束
 
-- 保持本文与 `.harness/architecture.json` 一致。
+- 保持本文与 `harness/.harness/architecture.json` 一致。
 - 在 CI 中强制执行架构边界校验。
-- 例外情况记录到 `docs/decisions/`。
+- 例外情况记录到 `harness/docs/decisions/`。
 - 重要模块重构时同步更新图示、调用链和边界约束。
