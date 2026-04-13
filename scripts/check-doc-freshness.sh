@@ -6,6 +6,8 @@ THRESHOLD=30
 SCAN_PATH="harness/docs"
 OUTPUT_JSON=0
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+GIT_REPO=0
+TIMESTAMP_SOURCE="git_history"
 
 # shellcheck source=scripts/lib/doc-paths.sh
 . "$SCRIPT_DIR/lib/doc-paths.sh"
@@ -57,12 +59,15 @@ file_timestamp() {
   local file="$1"
   local ts
 
-  ts="$(git log -1 --format='%ct' -- "$file" 2>/dev/null || true)"
-  if [ -n "$ts" ]; then
-    printf '%s' "$ts"
-    return
+  if [ "$GIT_REPO" -eq 1 ]; then
+    ts="$(git log -1 --format='%ct' -- "$file" 2>/dev/null || true)"
+    if [ -n "$ts" ]; then
+      printf '%s' "$ts"
+      return
+    fi
   fi
 
+  TIMESTAMP_SOURCE="file_mtime"
   if stat -f %m "$file" >/dev/null 2>&1; then
     stat -f %m "$file"
   elif stat -c %Y "$file" >/dev/null 2>&1; then
@@ -94,6 +99,8 @@ emit_report() {
   printf '"stale_count":%s,' "$stale"
   printf '"freshness_score":%s,' "$score"
   printf '"path":"%s",' "$(json_escape "$SCAN_PATH")"
+  printf '"git_repo":%s,' "$( [ "$GIT_REPO" -eq 1 ] && printf 'true' || printf 'false' )"
+  printf '"timestamp_source":"%s",' "$(json_escape "$TIMESTAMP_SOURCE")"
   printf '"stale_files":['
   while IFS='|' read -r file age; do
     [ -n "$file" ] || continue
@@ -123,6 +130,11 @@ main() {
   parse_args "$@"
   if [ -z "$SCAN_PATH" ]; then
     SCAN_PATH="$(harness_docs_root_path)"
+  fi
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    GIT_REPO=1
+  else
+    TIMESTAMP_SOURCE="file_mtime"
   fi
   now="$(date +%s)"
 

@@ -3,6 +3,7 @@
 set -euo pipefail
 
 CONFIG_PATH="harness/.harness/architecture.json"
+SRC_ROOTS=()
 
 json_escape() {
   local text="$1"
@@ -152,7 +153,7 @@ file_layer() {
     fi
   fi
 
-  relative_file="${file#"$SRC_ROOT_PREFIX"}"
+  relative_file="$(relative_to_source_root "$file")"
   path_layer "$relative_file"
 }
 
@@ -169,8 +170,35 @@ file_domain() {
     fi
   fi
 
-  relative_file="${file#"$SRC_ROOT_PREFIX"}"
+  relative_file="$(relative_to_source_root "$file")"
   path_domain "$relative_file"
+}
+
+relative_to_source_root() {
+  local file="$1"
+  local src_root=""
+  local prefix=""
+
+  for src_root in "${SRC_ROOTS[@]-}"; do
+    prefix="${src_root%/}/"
+    case "$file" in
+      "$prefix"*)
+        printf '%s' "${file#"$prefix"}"
+        return
+        ;;
+    esac
+  done
+
+  printf '%s' "$file"
+}
+
+source_file_list() {
+  local src_root=""
+
+  for src_root in "${SRC_ROOTS[@]-}"; do
+    [ -d "$src_root" ] || continue
+    find "$src_root" -type f
+  done | sort -u
 }
 
 record_violation() {
@@ -203,7 +231,7 @@ check_file() {
   local current_index
   local target_index
 
-  relative_file="${file#"$SRC_ROOT_PREFIX"}"
+  relative_file="$(relative_to_source_root "$file")"
   domain="$(file_domain "$file")"
   current_layer="$(file_layer "$file")"
   current_index="$(layer_index "$current_layer")"
@@ -333,7 +361,7 @@ EOF
 }
 
 main() {
-  local src_root
+  local src_root=""
   local file
 
   parse_args "$@"
@@ -345,13 +373,23 @@ main() {
   fi
 
   LAYERS="$(jq -r '.layers[]?' "$CONFIG_PATH")"
-  src_root="$(jq -r '.src_root // "src"' "$CONFIG_PATH")"
   PROVIDERS_DIR="$(jq -r '.cross_domain_allowed_via // "providers"' "$CONFIG_PATH")"
   FORBIDDEN_DEPENDENCIES="$(jq -r '.forbidden_dependencies[]? // empty' "$CONFIG_PATH")"
   VIOLATIONS=""
-  SRC_ROOT_PREFIX="${src_root%/}/"
 
-  if [ ! -d "$src_root" ]; then
+  while IFS= read -r src_root; do
+    [ -n "$src_root" ] || continue
+    SRC_ROOTS+=("$src_root")
+  done <<EOF
+$(jq -r '.src_roots[]? // empty' "$CONFIG_PATH")
+EOF
+
+  if [ "${#SRC_ROOTS[@]}" -eq 0 ]; then
+    src_root="$(jq -r '.src_root // "src"' "$CONFIG_PATH")"
+    SRC_ROOTS+=("$src_root")
+  fi
+
+  if ! printf '%s\n' "${SRC_ROOTS[@]-}" | while IFS= read -r src_root; do [ -d "$src_root" ] && exit 0; done; then
     printf '{"status":"passed","config":"%s","violations":[]}\n' "$(json_escape "$CONFIG_PATH")"
     exit 0
   fi
@@ -360,7 +398,7 @@ main() {
     [ -n "$file" ] || continue
     check_file "$file"
   done <<EOF
-$(find "$src_root" -type f | sort)
+$(source_file_list)
 EOF
 
   if emit_violations_json; then

@@ -46,4 +46,11 @@ else
   fail_test "verification output missing PASSED"
 fi
 
+it "documents supported init tool aliases"
+if grep -q "cursor" "$SKILLMD" && grep -q "windsurf" "$SKILLMD" && grep -q "anthropic-claude" "$SKILLMD" && grep -q "google-gemini" "$SKILLMD"; then
+  pass_test "SKILL.md mentions supported aliases"
+else
+  fail_test "SKILL.md is missing one or more supported aliases"
+fi
+
 print_summary

@@ -82,6 +82,32 @@ architecture_src_root() {
   esac
 }
 
+architecture_src_roots_json() {
+  local source_roots=()
+  local path=""
+
+  case "$TEMPLATE_PROFILE" in
+    java-backend-service|java-batch-job|java-adapter)
+      if [ "$STACK" = "java-maven" ] || [ "$STACK" = "java-gradle" ]; then
+        while IFS= read -r path; do
+          [ -n "$path" ] || continue
+          source_roots+=("$path")
+        done <<EOF
+$(find . \
+  \( -path './.git' -o -path './harness' -o -path './target' -o -path './build' -o -path './.build' -o -path './node_modules' \) -prune -o \
+  -type d -path '*/src/main/java' -print | sed 's#^\./##' | sort -u)
+EOF
+      fi
+      ;;
+  esac
+
+  if [ "${#source_roots[@]}" -eq 0 ]; then
+    source_roots+=("$(architecture_src_root)")
+  fi
+
+  append_array_json "${source_roots[@]}"
+}
+
 architecture_package_conventions_json() {
   case "$TEMPLATE_PROFILE" in
     java-backend-service|java-batch-job|java-adapter)
@@ -621,6 +647,7 @@ render_content() {
   content="${content//'{{ARCHITECTURE_LAYERS_JSON}}'/$(architecture_layers_json)}"
   content="${content//'{{ARCHITECTURE_LAYER_DIRECTION}}'/$(architecture_layer_direction)}"
   content="${content//'{{ARCHITECTURE_SRC_ROOT}}'/$(architecture_src_root)}"
+  content="${content//'{{ARCHITECTURE_SRC_ROOTS_JSON}}'/$(architecture_src_roots_json)}"
   content="${content//'{{ARCHITECTURE_PACKAGE_CONVENTIONS_JSON}}'/$(architecture_package_conventions_json)}"
   content="${content//'{{ARCHITECTURE_CROSS_DOMAIN_VIA}}'/$(architecture_cross_domain_via)}"
   content="${content//'{{ARCHITECTURE_FORBIDDEN_DEPENDENCIES_JSON}}'/$(architecture_forbidden_dependencies_json)}"

@@ -201,6 +201,49 @@ assert_json_field "$output" '.next_steps | index("For Java projects, prefer reru
 assert_json_field "$output" '.next_steps | index("For Java profiles, validate-spec now defaults to strict doc-state enforcement; scaffold docs will fail validation until hydrated") != null' "true"
 teardown_test_dir
 
+it "captures multiple Java source roots in architecture config for multi-module repos"
+setup_test_dir
+init_git_repo
+cat > pom.xml <<'EOF'
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>sample-parent</artifactId>
+  <version>1.0.0</version>
+  <packaging>pom</packaging>
+</project>
+EOF
+mkdir -p module-api/src/main/java/com/example/api/interfaces/http
+mkdir -p module-service/src/main/java/com/example/service/application
+cat > module-api/pom.xml <<'EOF'
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <artifactId>module-api</artifactId>
+</project>
+EOF
+cat > module-service/pom.xml <<'EOF'
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <artifactId>module-service</artifactId>
+</project>
+EOF
+cat > module-api/src/main/java/com/example/api/interfaces/http/BillingController.java <<'EOF'
+package com.example.api.interfaces.http;
+
+public class BillingController {}
+EOF
+cat > module-service/src/main/java/com/example/service/application/BillingApplicationService.java <<'EOF'
+package com.example.service.application;
+
+public class BillingApplicationService {}
+EOF
+output=$(bash "$REPO_ROOT/scripts/init-harness.sh" 2>&1)
+status=$?
+assert_success "$status" "init command succeeds on multi-module maven project"
+assert_json_field "$(cat harness/.harness/architecture.json)" '.src_roots | index("module-api/src/main/java") != null' "true"
+assert_json_field "$(cat harness/.harness/architecture.json)" '.src_roots | index("module-service/src/main/java") != null' "true"
+teardown_test_dir
+
 it "prefers Java detection for mixed Java and Node repositories"
 setup_test_dir
 init_git_repo

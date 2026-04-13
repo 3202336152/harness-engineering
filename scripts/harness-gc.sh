@@ -102,7 +102,9 @@ require_jq() {
 
 file_mtime() {
   local path="$1"
-  if stat -f %m "$path" >/dev/null 2>&1; then
+  if date -r "$path" +%s >/dev/null 2>&1; then
+    date -r "$path" +%s
+  elif stat -f %m "$path" >/dev/null 2>&1; then
     stat -f %m "$path"
   elif stat -c %Y "$path" >/dev/null 2>&1; then
     stat -c %Y "$path"

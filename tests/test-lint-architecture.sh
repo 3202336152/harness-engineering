@@ -116,4 +116,38 @@ assert_json_field "$output" '.violations | map(select(.import == "com.example.or
 assert_json_field "$output" '.violations | map(select(.layer == "application" and .target_layer == "infrastructure")) | length' "1"
 teardown_test_dir
 
+it "supports multiple source roots configured via src_roots"
+setup_test_dir
+init_git_repo
+mkdir -p harness/.harness module-api/src/main/java/com/example/order/application module-infra/src/main/java/com/example/order/infrastructure
+cat > harness/.harness/architecture.json <<'EOF'
+{
+  "layers": ["domain", "application", "infrastructure", "interfaces"],
+  "src_roots": ["module-api/src/main/java", "module-infra/src/main/java"],
+  "cross_domain_allowed_via": "anti-corruption-layer",
+  "forbidden_dependencies": ["application -> infrastructure"]
+}
+EOF
+cat > module-api/src/main/java/com/example/order/application/OrderApplicationService.java <<'EOF'
+package com.example.order.application;
+
+import com.example.order.infrastructure.OrderRepositoryImpl;
+
+public class OrderApplicationService {
+  private final OrderRepositoryImpl repository = new OrderRepositoryImpl();
+}
+EOF
+cat > module-infra/src/main/java/com/example/order/infrastructure/OrderRepositoryImpl.java <<'EOF'
+package com.example.order.infrastructure;
+
+public class OrderRepositoryImpl {}
+EOF
+output=$(bash "$REPO_ROOT/scripts/lint-architecture.sh" 2>&1)
+status=$?
+assert_eq "1" "$status" "lint exits non-zero on multi-root forbidden dependency"
+assert_json_field "$output" ".status" "violations"
+assert_json_field "$output" '.violations | map(select(.file == "module-api/src/main/java/com/example/order/application/OrderApplicationService.java")) | length' "1"
+assert_json_field "$output" '.violations | map(select(.target_layer == "infrastructure")) | length' "1"
+teardown_test_dir
+
 print_summary

@@ -25,6 +25,19 @@ assert_json_field "$output" '.required_context | index("harness/docs/project/项
 assert_json_field "$output" '.required_context | index("harness/docs/features/FEAT-010-order-query/功能概览.md") != null' "true"
 teardown_test_dir
 
+it "resolves legacy project doc filenames from always_include policy entries"
+setup_test_dir
+init_git_repo
+bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
+mv "harness/docs/project/核心信念.md" "harness/docs/project/core-beliefs.md"
+mv "harness/docs/project/项目架构.md" "harness/docs/project/ARCHITECTURE.md"
+output=$(bash "$REPO_ROOT/scripts/resolve-task-context.sh" --task "Legacy Docs" --json 2>&1)
+status=$?
+assert_success "$status" "context resolution succeeds with legacy project docs"
+assert_json_field "$output" '.required_context | index("harness/docs/project/core-beliefs.md") != null' "true"
+assert_json_field "$output" '.required_context | index("harness/docs/project/ARCHITECTURE.md") != null' "true"
+teardown_test_dir
+
 it "prepare stage creates feature spec, machine plan, and context bundle"
 setup_test_dir
 init_git_repo
@@ -40,6 +53,18 @@ assert_file_exists "harness/.harness/runtime/context/order-query.json"
 assert_json_field "$output" ".status" "success"
 assert_json_field "$output" ".feature_created" "true"
 assert_json_field "$output" ".context.status" "success"
+teardown_test_dir
+
+it "prepare stage succeeds without explicit change types"
+setup_test_dir
+init_git_repo
+bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
+output=$(bash "$REPO_ROOT/scripts/harness-exec.sh" prepare --task "Inventory Sync" --feature-id FEAT-016 --title "Inventory Sync" --owner alice --json 2>&1)
+status=$?
+assert_success "$status" "prepare stage succeeds without change types"
+assert_json_field "$output" ".status" "success"
+assert_json_field "$output" ".context.status" "success"
+assert_json_field "$output" '.context.change_types | length' "0"
 teardown_test_dir
 
 it "prepare stage honors HARNESS_AGENT_NAME when --agent is omitted"

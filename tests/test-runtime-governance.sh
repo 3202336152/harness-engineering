@@ -149,4 +149,41 @@ assert_json_number_gte "$output" ".pruned.run_records" "1"
 assert_json_number_gte "$output" ".pruned.evidence_dirs" "1"
 teardown_test_dir
 
+it "keeps newest runtime artifacts when stat is unavailable and date -r is used"
+setup_test_dir
+init_git_repo
+bash "$REPO_ROOT/scripts/init-harness.sh" --project-name sample-app >/dev/null 2>&1
+mkdir -p harness/.harness/evidence/z-old-run harness/.harness/evidence/a-new-run fake-bin
+printf '{}' > harness/.harness/runtime/context/z-old.json
+printf '{}' > harness/.harness/runtime/context/a-new.json
+printf '{}' > harness/.harness/runs/z-old.json
+printf '{}' > harness/.harness/runs/a-new.json
+printf '{}' > harness/.harness/evidence/z-old-run/manifest.json
+printf '{}' > harness/.harness/evidence/a-new-run/manifest.json
+touch -t 202401010101 harness/.harness/runtime/context/z-old.json harness/.harness/runs/z-old.json harness/.harness/evidence/z-old-run
+touch -t 202401020202 harness/.harness/runtime/context/a-new.json harness/.harness/runs/a-new.json harness/.harness/evidence/a-new-run
+cat > fake-bin/stat <<'EOF'
+#!/bin/bash
+exit 1
+EOF
+cat > fake-bin/date <<'EOF'
+#!/bin/bash
+if [ "${1:-}" = "-r" ]; then
+  /bin/date "$@"
+else
+  printf '1710000000\n'
+fi
+EOF
+chmod +x fake-bin/stat fake-bin/date
+output=$(PATH="$PWD/fake-bin:$PATH" bash "$REPO_ROOT/scripts/harness-gc.sh" --json --keep-context 1 --keep-runs 1 --keep-evidence 1 2>&1)
+status=$?
+assert_success "$status" "runtime gc succeeds when stat is unavailable"
+assert_file_not_exists "harness/.harness/runtime/context/z-old.json"
+assert_file_exists "harness/.harness/runtime/context/a-new.json"
+assert_file_not_exists "harness/.harness/runs/z-old.json"
+assert_file_exists "harness/.harness/runs/a-new.json"
+assert_dir_not_exists "harness/.harness/evidence/z-old-run"
+assert_dir_exists "harness/.harness/evidence/a-new-run"
+teardown_test_dir
+
 print_summary

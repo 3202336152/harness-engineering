@@ -66,4 +66,20 @@ assert_json_field "$output" ".stale_count" "1"
 assert_json_field "$output" '.stale_files[0].file' "harness/docs/project/项目 架构 v2.md"
 teardown_test_dir
 
+it "reports file mtime fallback when not inside a git repository"
+setup_test_dir
+mkdir -p harness/docs/project
+cat > harness/docs/project/项目架构.md <<'EOF'
+# 项目架构
+本地草稿。
+EOF
+touch -t 202401010101 harness/docs/project/项目架构.md
+output=$(bash "$REPO_ROOT/scripts/check-doc-freshness.sh" --threshold 30 --json 2>&1)
+status=$?
+assert_success "$status" "doc freshness succeeds outside git"
+assert_json_field "$output" ".git_repo" "false"
+assert_json_field "$output" ".timestamp_source" "file_mtime"
+assert_json_field "$output" ".status" "warning"
+teardown_test_dir
+
 print_summary

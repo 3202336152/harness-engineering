@@ -99,6 +99,7 @@ Generated project-level docs also include `template_version`, `template_profile`
 The scaffold also adds `harness/docs/project/运行基线.md` and `harness/docs/project/可观测性基线.md` so rollout, on-call, and telemetry rules are part of the shared truth.
 By default, init renders both `CLAUDE.md` and `AGENTS.md` from the same canonical entry template so common agent tools share identical content.
 Use `--tool codex`, `--tool claude-code`, `--tool gemini-cli`, or `--tool all` to target specific tool filenames; rerunning init with another tool adds the missing entry file instead of replacing the previous one.
+Accepted aliases also normalize to the same targets: `cursor` and `windsurf` map to `codex`, `anthropic-claude` maps to `claude-code`, and `google-gemini` maps to `gemini-cli`.
 Use `--entry-file <path>` when a tool expects a custom entry filename that is not built in.
 For Java repos, the default profile is `java-backend-service`, and you can override it with `--profile`.
 For Java profiles, generated policy now defaults to strict doc-state enforcement, and enabling `--with-git-hook` or `--with-husky` automatically upgrades local spec checks to strict mode.

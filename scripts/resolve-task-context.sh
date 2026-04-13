@@ -48,6 +48,19 @@ append_array_json() {
   printf ']'
 }
 
+append_safe_array_json() {
+  local array_name="$1"
+  local length=0
+
+  eval "length=\${#${array_name}[@]}"
+  if [ "$length" -eq 0 ]; then
+    printf '[]'
+    return
+  fi
+
+  eval "append_array_json \"\${${array_name}[@]}\""
+}
+
 append_unique() {
   local value="$1"
   shift
@@ -90,6 +103,17 @@ append_change_type() {
   if [ "${#CHANGE_TYPES[@]}" -eq 0 ] || append_unique "$change_type" "${CHANGE_TYPES[@]}"; then
     CHANGE_TYPES+=("$change_type")
   fi
+}
+
+resolve_project_doc_policy_path() {
+  local path="$1"
+
+  if printf '%s' "$path" | grep -q '^harness/docs/project/'; then
+    first_existing_project_doc_by_path "$path" || printf '%s' "$path"
+    return 0
+  fi
+
+  printf '%s' "$path"
 }
 
 usage() {
@@ -245,6 +269,7 @@ build_context_lists() {
 
   while IFS= read -r item; do
     [ -n "$item" ] || continue
+    item="$(resolve_project_doc_policy_path "$item")"
     [ -f "$item" ] && append_required_context "$item"
   done <<EOF
 $(jq -r '.always_include[]?' "$POLICY_PATH")
@@ -275,9 +300,7 @@ EOF
 
       while IFS= read -r path; do
         [ -n "$path" ] || continue
-        if printf '%s' "$path" | grep -q '^harness/docs/project/'; then
-          path="$(first_existing_project_doc_by_path "$path" || true)"
-        fi
+        path="$(resolve_project_doc_policy_path "$path")"
         [ -f "$path" ] && append_recommended_context "$path"
       done <<EOF
 $(jq -r '.related_project_docs[]?' "$manifest_path")
@@ -297,9 +320,7 @@ EOF
       while IFS= read -r item; do
         [ -n "$item" ] || continue
         if printf '%s' "$item" | grep -q '/'; then
-          if printf '%s' "$item" | grep -q '^harness/docs/project/'; then
-            item="$(first_existing_project_doc_by_path "$item" || true)"
-          fi
+          item="$(resolve_project_doc_policy_path "$item")"
           [ -f "$item" ] && append_required_context "$item"
         else
           path="$(first_existing_feature_doc_by_name "$feature_dir" "$item" || true)"
@@ -332,16 +353,16 @@ emit_json_report() {
   printf '"risk_level":"%s",' "$(json_escape "$(risk_level)")"
   printf '"project_test_command":"%s",' "$(json_escape "$(test_command)")"
   printf '"required_context":'
-  append_array_json "${REQUIRED_CONTEXT[@]}"
+  append_safe_array_json "REQUIRED_CONTEXT"
   printf ','
   printf '"recommended_context":'
-  append_array_json "${RECOMMENDED_CONTEXT[@]}"
+  append_safe_array_json "RECOMMENDED_CONTEXT"
   printf ','
   printf '"change_types":'
-  append_array_json "${CHANGE_TYPES[@]}"
+  append_safe_array_json "CHANGE_TYPES"
   printf ','
   printf '"verification_steps":'
-  append_array_json "${VERIFICATION_STEPS[@]}"
+  append_safe_array_json "VERIFICATION_STEPS"
   if [ -n "$WRITE_BUNDLE" ]; then
     printf ',"bundle_path":"%s"' "$(json_escape "$WRITE_BUNDLE")"
   fi
