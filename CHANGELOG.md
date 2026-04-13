@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Hardened `json_escape()` so generated JSON stays valid for control characters and jq-backed escaping paths.
+- Extended `lint-architecture.sh` with `allowed_cross_layer_types` glob allowlists and wildcard Java import detection.
+- Added rule-level `severity` support to `lint-architecture.sh`, including non-blocking warning output and JSON metadata for each violation.
+- Added `audit-harness.sh --deep` so audits can execute local harness checks and report the results under `deep_checks`.
+- Made `harness-exec.sh verify` respect `run-policy.json` step ordering, fail-fast behavior, and per-step timeouts, while also fixing command status propagation for nested harness commands.
+- Expanded `scan-java-project.sh` inventory coverage for additional Spring component roles such as repositories, configuration classes, controller advice, aspects, configuration properties, event listeners, and `@Bean` methods.
+
 ## 1.1.0 - 2026-04-13
 
 - Added `doc_state: scaffold|hydrated` governance for generated project and feature docs, plus strict validation that blocks scaffold docs from passing as completed specs.

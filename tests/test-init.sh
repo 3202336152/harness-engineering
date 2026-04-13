@@ -124,6 +124,8 @@ assert_json_field "$(cat harness/.harness/context-policy.json)" '.always_include
 assert_json_field "$(cat harness/.harness/context-policy.json)" '.always_include | index("harness/docs/project/核心信念.md") != null' "true"
 assert_json_field "$(cat harness/.harness/architecture.json)" '.layers[0]' "types"
 assert_json_field "$(cat harness/.harness/run-policy.json)" ".verify_steps[0]" "doc_impact"
+assert_json_field "$(cat harness/.harness/run-policy.json)" ".verify_fail_fast" "false"
+assert_json_field "$(cat harness/.harness/run-policy.json)" ".verify_timeout_seconds" "0"
 assert_json_field "$(cat harness/.harness/observability-policy.json)" ".version" "1.0.0"
 assert_json_field "$(cat harness/.harness/runtime/task-memory.json)" ".version" "1.0.0"
 assert_json_field "$(cat harness/.harness/runtime/last-audit.json)" ".status" "never_run"

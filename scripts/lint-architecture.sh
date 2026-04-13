@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_PATH="harness/.harness/architecture.json"
 SRC_ROOTS=()
+ALLOWED_CROSS_LAYER_TYPES=()
 
 # shellcheck source=scripts/lib/common.sh
 . "$SCRIPT_DIR/lib/common.sh"
@@ -50,6 +51,28 @@ layer_index() {
   printf '%s' "-1"
 }
 
+normalize_severity() {
+  case "$1" in
+    warning|warn)
+      printf 'warning'
+      ;;
+    off|disabled|ignore)
+      printf 'off'
+      ;;
+    *)
+      printf 'error'
+      ;;
+  esac
+}
+
+severity_for_rule() {
+  local rule="$1"
+  local configured=""
+
+  configured="$(jq -r --arg rule "$rule" '.severity[$rule] // "error"' "$CONFIG_PATH" 2>/dev/null || printf 'error')"
+  normalize_severity "$configured"
+}
+
 dependency_forbidden() {
   local current_layer="$1"
   local target_layer="$2"
@@ -69,6 +92,20 @@ dependency_forbidden() {
   done <<EOF
 $FORBIDDEN_DEPENDENCIES
 EOF
+
+  return 1
+}
+
+import_path_allowed() {
+  local import_path="$1"
+  local pattern=""
+
+  for pattern in "${ALLOWED_CROSS_LAYER_TYPES[@]-}"; do
+    [ -n "$pattern" ] || continue
+    if [[ "$import_path" == $pattern ]]; then
+      return 0
+    fi
+  done
 
   return 1
 }
@@ -196,14 +233,25 @@ record_violation() {
   local current_layer="$3"
   local target_layer="$4"
   local import_path="$5"
-  local message="$6"
-  local fix="$7"
+  local rule="$6"
+  local message="$7"
+  local fix="$8"
+  local severity=""
+
+  severity="$(severity_for_rule "$rule")"
+  if [ "$severity" = "off" ]; then
+    return
+  fi
+
+  if [ "$severity" = "error" ]; then
+    HAS_ERROR_VIOLATIONS=1
+  fi
 
   if [ -n "$VIOLATIONS" ]; then
     VIOLATIONS="$VIOLATIONS
-$file|$line|$current_layer|$target_layer|$import_path|$message|$fix"
+$file|$line|$current_layer|$target_layer|$import_path|$rule|$severity|$message|$fix"
   else
-    VIOLATIONS="$file|$line|$current_layer|$target_layer|$import_path|$message|$fix"
+    VIOLATIONS="$file|$line|$current_layer|$target_layer|$import_path|$rule|$severity|$message|$fix"
   fi
 }
 
@@ -238,6 +286,10 @@ check_file() {
       continue
     fi
 
+    if import_path_allowed "$import_path"; then
+      continue
+    fi
+
     if dependency_forbidden "$current_layer" "$target_layer"; then
       record_violation \
         "$file" \
@@ -245,6 +297,7 @@ check_file() {
         "$current_layer" \
         "$target_layer" \
         "$import_path" \
+        "forbidden_dependency" \
         "Forbidden dependency: $current_layer must not import $target_layer" \
         "Move the dependency to an allowed layer or introduce a domain-facing contract."
       continue
@@ -262,6 +315,7 @@ check_file() {
         "$current_layer" \
         "$target_layer" \
         "$import_path" \
+        "layer_direction" \
         "Layer $current_layer must not import higher layer $target_layer" \
         "Move shared contracts downward or invert the dependency with an interface."
     fi
@@ -273,6 +327,7 @@ check_file() {
         "$current_layer" \
         "$target_layer" \
         "$import_path" \
+        "cross_domain_import" \
         "Direct cross-domain import detected from $domain" \
         "Use provider interfaces for cross-domain communication."
     fi
@@ -281,11 +336,11 @@ $(awk '
   {
     line=$0
     path=""
-    if (match(line, /^[[:space:]]*import[[:space:]]+static[[:space:]]+[A-Za-z0-9_.]+[[:space:]]*;/)) {
+    if (match(line, /^[[:space:]]*import[[:space:]]+static[[:space:]]+[A-Za-z0-9_.*]+[[:space:]]*;/)) {
       path=substr(line, RSTART, RLENGTH)
       sub(/^[[:space:]]*import[[:space:]]+static[[:space:]]+/, "", path)
       sub(/[[:space:]]*;[[:space:]]*$/, "", path)
-    } else if (match(line, /^[[:space:]]*import[[:space:]]+[A-Za-z0-9_.]+[[:space:]]*;/)) {
+    } else if (match(line, /^[[:space:]]*import[[:space:]]+[A-Za-z0-9_.*]+[[:space:]]*;/)) {
       path=substr(line, RSTART, RLENGTH)
       sub(/^[[:space:]]*import[[:space:]]+/, "", path)
       sub(/[[:space:]]*;[[:space:]]*$/, "", path)
@@ -318,8 +373,12 @@ emit_violations_json() {
   local current_layer
   local target_layer
   local import_path
+  local rule
+  local severity
   local message
   local fix
+  local report_status="violations"
+  local result=1
 
   printf '{'
   if [ -z "$VIOLATIONS" ]; then
@@ -327,18 +386,25 @@ emit_violations_json() {
     return 0
   fi
 
-  printf '"status":"violations","config":"%s","violations":[' "$(json_escape "$CONFIG_PATH")"
-  while IFS='|' read -r file line current_layer target_layer import_path message fix; do
+  if [ "${HAS_ERROR_VIOLATIONS:-0}" -eq 0 ]; then
+    report_status="warnings"
+    result=0
+  fi
+
+  printf '"status":"%s","config":"%s","violations":[' "$report_status" "$(json_escape "$CONFIG_PATH")"
+  while IFS='|' read -r file line current_layer target_layer import_path rule severity message fix; do
     [ -n "$file" ] || continue
     if [ "$count" -gt 0 ]; then
       printf ','
     fi
-    printf '{"file":"%s","line":%s,"layer":"%s","target_layer":"%s","import":"%s","message":"%s","fix":"%s"}' \
+    printf '{"file":"%s","line":%s,"layer":"%s","target_layer":"%s","import":"%s","rule":"%s","severity":"%s","message":"%s","fix":"%s"}' \
       "$(json_escape "$file")" \
       "$line" \
       "$(json_escape "$current_layer")" \
       "$(json_escape "$target_layer")" \
       "$(json_escape "$import_path")" \
+      "$(json_escape "$rule")" \
+      "$(json_escape "$severity")" \
       "$(json_escape "$message")" \
       "$(json_escape "$fix")"
     count=$((count + 1))
@@ -346,7 +412,7 @@ emit_violations_json() {
 $VIOLATIONS
 EOF
   printf ']}\n'
-  return 1
+  return "$result"
 }
 
 main() {
@@ -365,6 +431,14 @@ main() {
   PROVIDERS_DIR="$(jq -r '.cross_domain_allowed_via // "providers"' "$CONFIG_PATH")"
   FORBIDDEN_DEPENDENCIES="$(jq -r '.forbidden_dependencies[]? // empty' "$CONFIG_PATH")"
   VIOLATIONS=""
+  HAS_ERROR_VIOLATIONS=0
+
+  while IFS= read -r pattern; do
+    [ -n "$pattern" ] || continue
+    ALLOWED_CROSS_LAYER_TYPES+=("$pattern")
+  done <<EOF
+$(jq -r '.allowed_cross_layer_types[]? // empty' "$CONFIG_PATH")
+EOF
 
   while IFS= read -r src_root; do
     [ -n "$src_root" ] || continue

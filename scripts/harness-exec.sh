@@ -39,6 +39,9 @@ RESOLVED_FEATURE_DIR=""
 RESOLVED_TASK=""
 RESOLVED_TITLE=""
 TEMP_FILES=()
+COMMAND_OUTPUT=""
+COMMAND_STATUS=0
+COMMAND_TIMED_OUT="false"
 
 cleanup_temp_files() {
   local path=""
@@ -179,16 +182,66 @@ parse_args() {
 }
 
 run_json_command() {
-  local __status_var="$1"
-  shift
-  local output=""
-  local status=0
+  COMMAND_OUTPUT=""
+  COMMAND_STATUS=0
+  COMMAND_TIMED_OUT="false"
   set +e
-  output="$("$@" 2>&1)"
-  status=$?
+  COMMAND_OUTPUT="$("$@" 2>&1)"
+  COMMAND_STATUS=$?
   set -e
-  printf -v "$__status_var" '%s' "$status"
-  printf '%s' "$output"
+}
+
+run_json_command_with_timeout() {
+  local timeout_seconds="$1"
+  shift
+  local output_file=""
+  local status_file=""
+  local pid=0
+  local watcher_pid=0
+
+  COMMAND_OUTPUT=""
+  COMMAND_STATUS=0
+  COMMAND_TIMED_OUT="false"
+
+  if [ "$timeout_seconds" -le 0 ] 2>/dev/null; then
+    run_json_command "$@"
+    return
+  fi
+
+  output_file="$(new_temp_file)"
+  status_file="$(new_temp_file)"
+
+  (
+    set +e
+    "$@" >"$output_file" 2>&1
+    printf '%s' "$?" > "$status_file"
+  ) &
+  pid=$!
+
+  (
+    sleep "$timeout_seconds"
+    if kill -0 "$pid" >/dev/null 2>&1; then
+      kill "$pid" >/dev/null 2>&1 || true
+      sleep 1
+      kill -9 "$pid" >/dev/null 2>&1 || true
+    fi
+  ) &
+  watcher_pid=$!
+
+  set +e
+  wait "$pid" >/dev/null 2>&1
+  set -e
+  kill "$watcher_pid" >/dev/null 2>&1 || true
+  wait "$watcher_pid" >/dev/null 2>&1 || true
+
+  COMMAND_OUTPUT="$(cat "$output_file" 2>/dev/null || true)"
+  if [ -s "$status_file" ]; then
+    COMMAND_STATUS="$(cat "$status_file" 2>/dev/null || printf '1')"
+    COMMAND_TIMED_OUT="false"
+  else
+    COMMAND_STATUS=124
+    COMMAND_TIMED_OUT="true"
+  fi
 }
 
 write_json_or_error() {
@@ -208,13 +261,43 @@ write_json_or_error() {
 load_policy_bool() {
   local filter="$1"
   local default_value="$2"
+  local value=""
 
   if [ ! -f "$RUN_POLICY_PATH" ]; then
     printf '%s' "$default_value"
     return
   fi
 
-  jq -r "$filter // $default_value" "$RUN_POLICY_PATH" 2>/dev/null || printf '%s' "$default_value"
+  value="$(jq -r "$filter" "$RUN_POLICY_PATH" 2>/dev/null || true)"
+  case "$value" in
+    true|false)
+      printf '%s' "$value"
+      ;;
+    *)
+      printf '%s' "$default_value"
+      ;;
+  esac
+}
+
+load_policy_number() {
+  local filter="$1"
+  local default_value="$2"
+  local value=""
+
+  if [ ! -f "$RUN_POLICY_PATH" ]; then
+    printf '%s' "$default_value"
+    return
+  fi
+
+  value="$(jq -r "$filter // empty" "$RUN_POLICY_PATH" 2>/dev/null || true)"
+  case "$value" in
+    ''|*[!0-9]*)
+      printf '%s' "$default_value"
+      ;;
+    *)
+      printf '%s' "$value"
+      ;;
+  esac
 }
 
 policy_mode_enabled() {
@@ -226,6 +309,181 @@ policy_mode_enabled() {
   fi
 
   jq -e --arg mode "$mode" "$filter | index(\$mode) != null" "$RUN_POLICY_PATH" >/dev/null 2>&1
+}
+
+default_verify_steps() {
+  cat <<'EOF'
+doc_impact
+spec_validation
+architecture_lint
+doc_freshness
+rollback_readiness
+EOF
+}
+
+load_verify_steps() {
+  local configured=""
+
+  if [ -f "$RUN_POLICY_PATH" ]; then
+    configured="$(jq -r '.verify_steps[]? // empty' "$RUN_POLICY_PATH" 2>/dev/null || true)"
+  fi
+
+  if [ -n "$configured" ]; then
+    printf '%s\n' "$configured"
+  else
+    default_verify_steps
+  fi
+}
+
+verify_step_skipped_json() {
+  local reason="$1"
+  local step="$2"
+
+  jq -n \
+    --arg status "skipped" \
+    --arg step "$step" \
+    --arg reason "$reason" \
+    '{status:$status,step:$step,executed:false,reason:$reason}'
+}
+
+verify_step_timeout_json() {
+  local step="$1"
+  local timeout_seconds="$2"
+
+  jq -n \
+    --arg status "timeout" \
+    --arg step "$step" \
+    --argjson timeout_seconds "$timeout_seconds" \
+    '{status:$status,step:$step,executed:true,timed_out:true,timeout_seconds:$timeout_seconds}'
+}
+
+status_with_reason_json() {
+  local status="$1"
+  local reason="$2"
+
+  jq -n \
+    --arg status "$status" \
+    --arg reason "$reason" \
+    '{status:$status,reason:$reason}'
+}
+
+normalize_verify_step_json() {
+  local step="$1"
+  local raw="$2"
+  local exit_code="$3"
+
+  if printf '%s' "$raw" | jq -e . >/dev/null 2>&1; then
+    printf '%s' "$raw" | jq -c \
+      --arg step "$step" \
+      --argjson exit_code "$exit_code" \
+      '. + {step:$step,executed:true,exit_code:$exit_code}'
+  else
+    jq -n \
+      --arg status "error" \
+      --arg step "$step" \
+      --arg raw_output "$raw" \
+      --argjson exit_code "$exit_code" \
+      '{status:$status,step:$step,executed:true,exit_code:$exit_code,raw_output:$raw_output}'
+  fi
+}
+
+set_verify_check_json() {
+  local step="$1"
+  local json="$2"
+
+  case "$step" in
+    spec_validation)
+      VERIFY_SPEC_JSON="$json"
+      ;;
+    doc_impact)
+      VERIFY_DOC_JSON="$json"
+      ;;
+    architecture_lint)
+      VERIFY_LINT_JSON="$json"
+      ;;
+    doc_freshness)
+      VERIFY_FRESHNESS_JSON="$json"
+      ;;
+    rollback_readiness)
+      VERIFY_ROLLBACK_JSON="$json"
+      ;;
+  esac
+}
+
+run_verify_step() {
+  local __json_var="$1"
+  local __status_var="$2"
+  local __timed_out_var="$3"
+  local step="$4"
+  local timeout_seconds="$5"
+  local cmd=()
+  local raw=""
+  local command_status=0
+  local timed_out="false"
+  local result_json=""
+
+  case "$step" in
+    spec_validation)
+      cmd=(bash "$SCRIPT_DIR/validate-spec.sh" --json)
+      if [ "$STRICT" -eq 1 ]; then
+        cmd+=(--strict)
+      fi
+      ;;
+    doc_impact)
+      cmd=(bash "$SCRIPT_DIR/check-doc-impact.sh" --json)
+      if [ "$USE_STAGED" -eq 1 ]; then
+        cmd+=(--staged)
+      fi
+      ;;
+    architecture_lint)
+      cmd=(bash "$SCRIPT_DIR/lint-architecture.sh")
+      ;;
+    doc_freshness)
+      cmd=(bash "$SCRIPT_DIR/check-doc-freshness.sh" --json)
+      ;;
+    rollback_readiness)
+      if [ -z "$FEATURE_ID" ]; then
+        result_json="$(verify_step_skipped_json "not_applicable" "$step")"
+        printf -v "$__json_var" '%s' "$result_json"
+        printf -v "$__status_var" '%s' "0"
+        printf -v "$__timed_out_var" '%s' "false"
+        return
+      fi
+      cmd=(bash "$SCRIPT_DIR/check-rollback-readiness.sh" --feature-id "$FEATURE_ID" --json)
+      ;;
+    *)
+      result_json="$(jq -n \
+        --arg status "error" \
+        --arg step "$step" \
+        --arg reason "unknown_step" \
+        '{status:$status,step:$step,executed:false,reason:$reason}')"
+      printf -v "$__json_var" '%s' "$result_json"
+      printf -v "$__status_var" '%s' "1"
+      printf -v "$__timed_out_var" '%s' "false"
+      return
+      ;;
+  esac
+
+  if [ "$timeout_seconds" -gt 0 ] 2>/dev/null; then
+    run_json_command_with_timeout "$timeout_seconds" "${cmd[@]}"
+    raw="$COMMAND_OUTPUT"
+    command_status="$COMMAND_STATUS"
+    timed_out="$COMMAND_TIMED_OUT"
+  else
+    run_json_command "${cmd[@]}"
+    raw="$COMMAND_OUTPUT"
+    command_status="$COMMAND_STATUS"
+  fi
+
+  if [ "$timed_out" = "true" ]; then
+    result_json="$(verify_step_timeout_json "$step" "$timeout_seconds")"
+  else
+    result_json="$(normalize_verify_step_json "$step" "$raw" "$command_status")"
+  fi
+
+  printf -v "$__json_var" '%s' "$result_json"
+  printf -v "$__status_var" '%s' "$command_status"
+  printf -v "$__timed_out_var" '%s' "$timed_out"
 }
 
 ensure_runtime_dirs() {
@@ -523,7 +781,9 @@ resolve_restore_context_json() {
     context_cmd+=(--feature-id "$selected_feature_id")
   fi
 
-  context_output="$(run_json_command context_status "${context_cmd[@]}")"
+  run_json_command "${context_cmd[@]}"
+  context_output="$COMMAND_OUTPUT"
+  context_status="$COMMAND_STATUS"
   if [ "$context_status" -eq 0 ] && printf '%s' "$context_output" | jq -e '.status == "success"' >/dev/null 2>&1; then
     printf '%s' "$context_output" | jq -c \
       '{required_context:(.required_context // []),recommended_context:(.recommended_context // []),verification_steps:(.verification_steps // [])}'
@@ -815,7 +1075,7 @@ finalize_with_runtime_artifacts() {
   if [ "$record_evidence" = "true" ] && policy_mode_enabled '(.evidence_on_modes // [])' "$mode"; then
     evidence_dir="harness/.harness/evidence/$run_id"
     artifacts_evidence_dir="$evidence_dir"
-    evidence_output="$(run_json_command evidence_status \
+    run_json_command \
       bash "$SCRIPT_DIR/collect-runtime-evidence.sh" \
         --run-id "$run_id" \
         --task "$RESOLVED_TASK" \
@@ -823,13 +1083,17 @@ finalize_with_runtime_artifacts() {
         --policy "$OBSERVABILITY_POLICY_PATH" \
         --output-dir "$evidence_dir" \
         --summary-file "$summary_tmp" \
-        --json)"
+        --json
+    evidence_output="$COMMAND_OUTPUT"
+    evidence_status="$COMMAND_STATUS"
     write_json_or_error "$evidence_output" "$evidence_tmp"
   fi
 
   jq -n '{status:"skipped"}' > "$gc_tmp"
   if policy_mode_enabled '(.gc_on_modes // [])' "$mode"; then
-    gc_output="$(run_json_command gc_status bash "$SCRIPT_DIR/harness-gc.sh" --run-policy "$RUN_POLICY_PATH" --json)"
+    run_json_command bash "$SCRIPT_DIR/harness-gc.sh" --run-policy "$RUN_POLICY_PATH" --json
+    gc_output="$COMMAND_OUTPUT"
+    gc_status="$COMMAND_STATUS"
     write_json_or_error "$gc_output" "$gc_tmp"
   fi
 
@@ -1000,6 +1264,7 @@ prepare_stage() {
   local feature_tmp=""
   local plan_tmp=""
   local context_tmp=""
+  local record_context_bundles="true"
 
   if [ -z "$TASK" ]; then
     printf '{"status":"error","error":"prepare requires --task"}\n'
@@ -1012,7 +1277,9 @@ prepare_stage() {
     if [ -n "$CHANGE_TYPES" ]; then
       feature_cmd+=(--change-types "$CHANGE_TYPES")
     fi
-    feature_json="$(run_json_command feature_status "${feature_cmd[@]}")"
+    run_json_command "${feature_cmd[@]}"
+    feature_json="$COMMAND_OUTPUT"
+    feature_status="$COMMAND_STATUS"
     if [ "$feature_status" -ne 0 ]; then
       printf '%s' "$feature_json"
       return "$feature_status"
@@ -1028,7 +1295,9 @@ prepare_stage() {
   if [ -n "$CHANGE_TYPES" ]; then
     plan_cmd+=(--change-types "$CHANGE_TYPES")
   fi
-  plan_json="$(run_json_command plan_status "${plan_cmd[@]}")"
+  run_json_command "${plan_cmd[@]}"
+  plan_json="$COMMAND_OUTPUT"
+  plan_status="$COMMAND_STATUS"
   if [ "$plan_status" -ne 0 ]; then
     printf '%s' "$plan_json"
     return "$plan_status"
@@ -1037,11 +1306,17 @@ prepare_stage() {
   slug="$(slugify "$TASK")"
   [ -n "$slug" ] || slug="context"
   context_path="harness/.harness/runtime/context/$slug.json"
-  context_cmd=(bash "$SCRIPT_DIR/resolve-task-context.sh" --task "$TASK" --json --write-bundle "$context_path")
+  record_context_bundles="$(load_policy_bool '.record_context_bundles' 'true')"
+  context_cmd=(bash "$SCRIPT_DIR/resolve-task-context.sh" --task "$TASK" --json)
+  if [ "$record_context_bundles" = "true" ]; then
+    context_cmd+=(--write-bundle "$context_path")
+  fi
   if [ -n "$FEATURE_ID" ]; then
     context_cmd+=(--feature-id "$FEATURE_ID")
   fi
-  context_json="$(run_json_command context_status "${context_cmd[@]}")"
+  run_json_command "${context_cmd[@]}"
+  context_json="$COMMAND_OUTPUT"
+  context_status="$COMMAND_STATUS"
   if [ "$context_status" -ne 0 ]; then
     printf '%s' "$context_json"
     return "$context_status"
@@ -1066,69 +1341,91 @@ prepare_stage() {
 
 verify_stage() {
   local spec_status=0
-  local spec_json=""
   local doc_status=0
-  local doc_json=""
   local lint_status=0
-  local lint_json=""
   local freshness_status=0
-  local freshness_json=""
   local rollback_status=0
-  local rollback_json='{"status":"skipped"}'
+  local VERIFY_SPEC_JSON=""
+  local VERIFY_DOC_JSON=""
+  local VERIFY_LINT_JSON=""
+  local VERIFY_FRESHNESS_JSON=""
+  local VERIFY_ROLLBACK_JSON=""
   local overall="passed"
-  local spec_cmd=()
-  local doc_cmd=()
+  local verify_fail_fast="false"
+  local verify_timeout_seconds=0
+  local stop_remaining=0
+  local step=""
+  local step_json=""
+  local step_status=0
+  local step_timed_out="false"
+  local verify_steps_lines=""
+  local verify_steps_json="[]"
   local spec_tmp=""
   local doc_tmp=""
   local lint_tmp=""
   local freshness_tmp=""
   local rollback_tmp=""
   local result_json=""
+  local verify_steps_raw=""
 
-  spec_cmd=(bash "$SCRIPT_DIR/validate-spec.sh" --json)
-  doc_cmd=(bash "$SCRIPT_DIR/check-doc-impact.sh" --json)
-  if [ "$STRICT" -eq 1 ]; then
-    spec_cmd+=(--strict)
-  fi
-  if [ "$USE_STAGED" -eq 1 ]; then
-    doc_cmd+=(--staged)
-  fi
+  verify_fail_fast="$(load_policy_bool '.verify_fail_fast' 'false')"
+  verify_timeout_seconds="$(load_policy_number '.verify_timeout_seconds' '0')"
+  verify_steps_raw="$(load_verify_steps)"
+  verify_steps_lines="$verify_steps_raw"
+  verify_steps_json="$(json_array_from_lines "$verify_steps_raw")"
 
-  spec_json="$(run_json_command spec_status "${spec_cmd[@]}")"
-  doc_json="$(run_json_command doc_status "${doc_cmd[@]}")"
-  lint_json="$(run_json_command lint_status bash "$SCRIPT_DIR/lint-architecture.sh")"
-  freshness_json="$(run_json_command freshness_status bash "$SCRIPT_DIR/check-doc-freshness.sh" --json)"
+  VERIFY_SPEC_JSON="$(verify_step_skipped_json "disabled_by_policy" "spec_validation")"
+  VERIFY_DOC_JSON="$(verify_step_skipped_json "disabled_by_policy" "doc_impact")"
+  VERIFY_LINT_JSON="$(verify_step_skipped_json "disabled_by_policy" "architecture_lint")"
+  VERIFY_FRESHNESS_JSON="$(verify_step_skipped_json "disabled_by_policy" "doc_freshness")"
+  VERIFY_ROLLBACK_JSON="$(verify_step_skipped_json "disabled_by_policy" "rollback_readiness")"
 
-  if [ -n "$FEATURE_ID" ]; then
-    rollback_json="$(run_json_command rollback_status bash "$SCRIPT_DIR/check-rollback-readiness.sh" --feature-id "$FEATURE_ID" --json)"
-  fi
+  while IFS= read -r step; do
+    [ -n "$step" ] || continue
 
-  for status in "$spec_status" "$doc_status" "$lint_status" "$freshness_status" "$rollback_status"; do
-    if [ "$status" -ne 0 ]; then
-      overall="invalid"
-      break
+    if [ "$stop_remaining" -eq 1 ]; then
+      set_verify_check_json "$step" "$(verify_step_skipped_json "fail_fast" "$step")"
+      continue
     fi
-  done
+
+    step_json=""
+    step_status=0
+    step_timed_out="false"
+    run_verify_step step_json step_status step_timed_out "$step" "$verify_timeout_seconds"
+    set_verify_check_json "$step" "$step_json"
+
+    if [ "$step_status" -ne 0 ] || [ "$step_timed_out" = "true" ]; then
+      overall="invalid"
+      if [ "$verify_fail_fast" = "true" ]; then
+        stop_remaining=1
+      fi
+    fi
+  done <<EOF
+$verify_steps_lines
+EOF
 
   spec_tmp="$(new_temp_file)"
   doc_tmp="$(new_temp_file)"
   lint_tmp="$(new_temp_file)"
   freshness_tmp="$(new_temp_file)"
   rollback_tmp="$(new_temp_file)"
-  printf '%s\n' "$spec_json" > "$spec_tmp"
-  printf '%s\n' "$doc_json" > "$doc_tmp"
-  printf '%s\n' "$lint_json" > "$lint_tmp"
-  printf '%s\n' "$freshness_json" > "$freshness_tmp"
-  printf '%s\n' "$rollback_json" > "$rollback_tmp"
+  write_json_or_error "$VERIFY_SPEC_JSON" "$spec_tmp"
+  write_json_or_error "$VERIFY_DOC_JSON" "$doc_tmp"
+  write_json_or_error "$VERIFY_LINT_JSON" "$lint_tmp"
+  write_json_or_error "$VERIFY_FRESHNESS_JSON" "$freshness_tmp"
+  write_json_or_error "$VERIFY_ROLLBACK_JSON" "$rollback_tmp"
 
   result_json="$(jq -n \
     --arg status "$overall" \
+    --argjson verify_steps "$verify_steps_json" \
+    --argjson verify_fail_fast "$verify_fail_fast" \
+    --argjson verify_timeout_seconds "$verify_timeout_seconds" \
     --slurpfile spec_validation "$spec_tmp" \
     --slurpfile doc_impact "$doc_tmp" \
     --slurpfile architecture_lint "$lint_tmp" \
     --slurpfile doc_freshness "$freshness_tmp" \
     --slurpfile rollback_readiness "$rollback_tmp" \
-    '{status:$status,checks:{spec_validation:$spec_validation[0],doc_impact:$doc_impact[0],architecture_lint:$architecture_lint[0],doc_freshness:$doc_freshness[0],rollback_readiness:$rollback_readiness[0]}}')"
+    '{status:$status,policy:{verify_steps:$verify_steps,verify_fail_fast:$verify_fail_fast,verify_timeout_seconds:$verify_timeout_seconds},checks:{spec_validation:$spec_validation[0],doc_impact:$doc_impact[0],architecture_lint:$architecture_lint[0],doc_freshness:$doc_freshness[0],rollback_readiness:$rollback_readiness[0]}}')"
 
   rm -f "$spec_tmp" "$doc_tmp" "$lint_tmp" "$freshness_tmp" "$rollback_tmp"
 
@@ -1160,6 +1457,7 @@ run_stage() {
   local autofix_tmp=""
   local verify_after_tmp=""
   local result_json=""
+  local autofix_on_verify_failure="true"
 
   prepare_cmd=(bash "$SCRIPT_DIR/harness-exec.sh" prepare --task "$TASK" --owner "$OWNER" --agent "$AGENT" --json)
   if [ -n "$FEATURE_ID" ]; then
@@ -1171,7 +1469,9 @@ run_stage() {
   if [ -n "$CHANGE_TYPES" ]; then
     prepare_cmd+=(--change-types "$CHANGE_TYPES")
   fi
-  prepare_json="$(run_json_command prepare_status "${prepare_cmd[@]}")"
+  run_json_command "${prepare_cmd[@]}"
+  prepare_json="$COMMAND_OUTPUT"
+  prepare_status="$COMMAND_STATUS"
   if [ "$prepare_status" -ne 0 ]; then
     printf '%s' "$prepare_json"
     return "$prepare_status"
@@ -1187,11 +1487,24 @@ run_stage() {
   if [ "$USE_STAGED" -eq 1 ]; then
     verify_cmd+=(--staged)
   fi
-  verify_json="$(run_json_command verify_status "${verify_cmd[@]}")"
+  run_json_command "${verify_cmd[@]}"
+  verify_json="$COMMAND_OUTPUT"
+  verify_status="$COMMAND_STATUS"
   if [ "$verify_status" -ne 0 ]; then
-    autofix_json="$(run_json_command autofix_status bash "$SCRIPT_DIR/harness-exec.sh" autofix-safe --json)"
-    verify_after_json="$(run_json_command verify_after_status "${verify_cmd[@]}")"
-    if [ "$verify_after_status" -ne 0 ]; then
+    autofix_on_verify_failure="$(load_policy_bool '.autofix_on_verify_failure' 'true')"
+    if [ "$autofix_on_verify_failure" = "true" ]; then
+      run_json_command bash "$SCRIPT_DIR/harness-exec.sh" autofix-safe --json
+      autofix_json="$COMMAND_OUTPUT"
+      autofix_status="$COMMAND_STATUS"
+      run_json_command "${verify_cmd[@]}"
+      verify_after_json="$COMMAND_OUTPUT"
+      verify_after_status="$COMMAND_STATUS"
+      if [ "$verify_after_status" -ne 0 ]; then
+        overall="invalid"
+      fi
+    else
+      autofix_json="$(status_with_reason_json "skipped" "disabled_by_policy")"
+      verify_after_json="$(status_with_reason_json "skipped" "autofix_disabled")"
       overall="invalid"
     fi
   fi

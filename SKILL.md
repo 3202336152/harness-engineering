@@ -110,7 +110,7 @@ Before first use on a new machine, run `bash scripts/check-runtime-deps.sh --jso
 
 `/harness init` only scaffolds structure, templates, and policy files. It does not semantically read the whole repository or auto-fill project truth. New docs start as `doc_state: scaffold`, and should be flipped to `doc_state: hydrated` only after the host model has read the relevant code and replaced template-only content with verified project facts.
 
-For Java repos, first refresh `harness/.harness/runtime/java-doc-scan.json` with `bash scripts/scan-java-project.sh --json`. The scan is the full inventory baseline for package roots, entrypoints, controllers, listeners, jobs, clients, application services, and domain services.
+For Java repos, first refresh `harness/.harness/runtime/java-doc-scan.json` with `bash scripts/scan-java-project.sh --json`. The scan is the full inventory baseline for package roots, entrypoints, controllers, listeners, jobs, clients, application services, domain services, repositories, components, configurations, controller advices, aspects, configuration properties, event listeners, and `@Bean` factory methods.
 
 After initialization, the host coding model should inspect the repo before filling `harness/docs/project/*`:
 
@@ -150,11 +150,12 @@ Scores map to maturity levels:
 Command:
 
 ```bash
-bash scripts/audit-harness.sh
+bash scripts/audit-harness.sh [--deep]
 ```
 
 The script prints JSON only on stdout so agents can parse it safely.
 When `harness/.harness/` already exists, the audit also refreshes `harness/.harness/runtime/last-audit.json` so the entry document can reason about audit staleness without relying on chat memory.
+Use `--deep` when you want the audit to run project-local harness checks such as `scripts/lint-architecture.sh` and `scripts/validate-spec.sh` instead of scoring maturity from file presence alone.
 
 ## Command: /harness plan
 
@@ -235,6 +236,7 @@ Behavior:
 
 - `prepare` creates a feature spec pack if needed, writes the Markdown plus JSON execution plan, and records a task context bundle under `harness/.harness/runtime/context/`.
 - `verify` aggregates spec validation, doc impact, architecture lint, doc freshness, and rollback readiness, then writes a run record, metrics ledger entry, task memory snapshot, progress report, and evidence bundle.
+- `verify` now honors `harness/.harness/run-policy.json` for `verify_steps`, `verify_fail_fast`, and `verify_timeout_seconds`, so warning-only checks can stay non-blocking while hard failures short-circuit or time out predictably.
 - `run` chains `prepare -> verify -> autofix-safe -> reverify`, records the final run result, and can trigger retention GC from `harness/.harness/run-policy.json`.
 - `restore` reconstructs the latest task summary, pending checklist items, and recommended context files from `harness/.harness/runtime/`.
 

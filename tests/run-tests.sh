@@ -4,6 +4,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+bash "$REPO_ROOT/tests/test-common.sh"
 bash "$REPO_ROOT/tests/test-init.sh"
 bash "$REPO_ROOT/tests/test-audit.sh"
 bash "$REPO_ROOT/tests/test-plan.sh"

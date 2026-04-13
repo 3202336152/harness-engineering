@@ -82,6 +82,8 @@ npx skills add 3202336152/harness-engineering
   - `harness/docs/features/FEAT-001-order-query/接口设计.md`
 - 生成的项目级/功能级 spec 会带 `template_version`、`template_profile`、`template_language` 元数据
 - `init` 还会生成 `harness/docs/project/运行基线.md`、`harness/docs/project/可观测性基线.md`、`harness/.harness/context-policy.json`、`harness/.harness/run-policy.json`
+- `harness/.harness/architecture.json` 支持通过 `allowed_cross_layer_types` 为 DTO / VO / Event 等跨层类型配置 allowlist
+- `harness/.harness/architecture.json` 也支持按规则配置 `severity`，让跨层 / 跨域问题以 `warning` 或 `error` 方式落到 JSON 结果中
 - `init` 会创建 `harness/.harness/exec-plans/`、`harness/.harness/product-specs/`、`harness/.harness/references/`，用于承接执行计划和辅助上下文资料
 - 项目规则通过 `harness/.harness/spec-policy.json` 描述
 - 功能文档通过 `bash scripts/new-feature-spec.sh ...` 生成，并附带 `manifest.json`
@@ -98,6 +100,7 @@ npx skills add 3202336152/harness-engineering
 - 运行期证据采集策略可通过 `harness/.harness/observability-policy.json` 配置
 - 运行记录会沉淀到 `harness/.harness/runs/`、`harness/.harness/metrics/`、`harness/.harness/evidence/`、`harness/.harness/runtime/`
 - 审计结果会在已初始化项目中刷新 `harness/.harness/runtime/last-audit.json`，便于 AI 判断是否长期未做健康检查
+- `bash scripts/audit-harness.sh --deep` 会在成熟度评分之外额外执行本地 `scripts/lint-architecture.sh` 与 `scripts/validate-spec.sh`，把真实执行结果写进 `deep_checks`
 - 旧的上下文 bundle、run record、evidence 目录可通过 `bash scripts/harness-gc.sh --json` 做保留清理
 
 ### 初始化后的第二阶段
@@ -105,6 +108,7 @@ npx skills add 3202336152/harness-engineering
 - `init` 只负责生成规范骨架和策略文件，不会语义理解整个仓库，也不会自动把项目真实信息补进 `harness/docs/project/`
 - 新生成的项目级/功能级文档默认带 `doc_state: scaffold`，表示它们只是骨架，不能直接当作项目真相源
 - 对 Java 项目，更可靠的做法是先运行 `bash scripts/scan-java-project.sh --json`，把 `harness/.harness/runtime/java-doc-scan.json` 作为全量扫描基线
+- 扫描结果除了 package roots / entrypoints / controllers / listeners / jobs / clients / application services / domain services，也会补充 repositories、components、configurations、controller advices、aspects、configuration properties、event listeners 和 `@Bean` 方法
 - 然后让宿主模型基于扫描清单做关键深读，再补全项目级文档
 - 推荐关键深读清单：`pom.xml` / `build.gradle*`、启动类或主入口、`src/main/java` 前两层包结构、主要 `Controller` / `Facade` / `Listener` / `Job`、核心 `ApplicationService` / `DomainService`、`application.yml` / `application-*.yml`
 - 这里不要求把所有源码全文一次性塞进上下文，但必须先完成全量扫描，再覆盖代表性入口、核心链路、关键配置和主要外部集成
@@ -150,6 +154,7 @@ bash scripts/init-harness.sh --with-github-actions
 - 文档熵控制：`manifest.json`、模板元数据、严格校验、template drift 检查、safe autofix 已经形成基础治理面
 - 历史模板迁移：`migrate-template-docs.sh` 会先备份，再调用 safe autofix 迁移结构类模板差异
 - 反馈闭环：`harness-exec.sh verify/run` 会聚合校验结果，并把 run record、metrics、task memory、progress、evidence 一起落盘
+- 运行策略：`harness/.harness/run-policy.json` 中的 `verify_steps`、`verify_fail_fast`、`verify_timeout_seconds` 会真实影响 `verify` 的执行顺序、短路策略和单步超时
 - 长周期记忆：`harness/.harness/runtime/task-memory.json` 与 `harness/.harness/runtime/progress.md` 会持续记录最近任务和运行状态
 - 审计记忆：`harness/.harness/runtime/last-audit.json` 会记录最近一次成熟度检查的时间与摘要，方便入口文档触发周期性 audit
 - 会话恢复：`harness-exec.sh restore` 可以在上下文压缩或切换会话后重建最近任务摘要与必读上下文

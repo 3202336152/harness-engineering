@@ -8,6 +8,8 @@
     "doc_freshness",
     "rollback_readiness"
   ],
+  "verify_fail_fast": false,
+  "verify_timeout_seconds": 0,
   "autofix_safe_steps": ["spec_structure"],
   "autofix_on_verify_failure": true,
   "record_context_bundles": true,

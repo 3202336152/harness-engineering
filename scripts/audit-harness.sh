@@ -13,6 +13,20 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 exit_if_version_flag "${1:-}"
 
+DEEP_MODE="false"
+DEEP_ARCH_EXECUTED="false"
+DEEP_ARCH_STATUS="skipped"
+DEEP_ARCH_EXIT_CODE=0
+DEEP_ARCH_REPORTED_STATUS=""
+DEEP_ARCH_REASON="not_requested"
+DEEP_SPEC_EXECUTED="false"
+DEEP_SPEC_STATUS="skipped"
+DEEP_SPEC_EXIT_CODE=0
+DEEP_SPEC_REPORTED_STATUS=""
+DEEP_SPEC_REASON="not_requested"
+CAPTURE_OUTPUT=""
+CAPTURE_STATUS=0
+
 ENTRY_SCORE=0
 ENTRY_LINE_COUNT=0
 ENTRY_STATUS=""
@@ -59,6 +73,31 @@ MATURITY_LEVEL=0
 MATURITY_LABEL="No Harness"
 LAST_AUDIT_PATH="harness/.harness/runtime/last-audit.json"
 LAST_AUDIT_WRITTEN=0
+
+usage() {
+  cat <<'EOF'
+Usage: audit-harness.sh [--deep]
+EOF
+}
+
+parse_args() {
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --deep)
+        DEEP_MODE="true"
+        shift
+        ;;
+      --help|-h)
+        usage
+        exit 0
+        ;;
+      *)
+        printf '{"status":"error","error":"Unknown argument: %s"}\n' "$(json_escape "$1")"
+        exit 1
+        ;;
+    esac
+  done
+}
 
 append_detail() {
   if [ -n "$1" ]; then
@@ -107,6 +146,58 @@ EOF
 
 first_existing_entry_document() {
   first_existing_entry_document_path || true
+}
+
+capture_command_output() {
+  CAPTURE_OUTPUT=""
+  CAPTURE_STATUS=0
+
+  set +e
+  CAPTURE_OUTPUT="$("$@" 2>&1)"
+  CAPTURE_STATUS=$?
+  set -e
+}
+
+reported_status_from_output() {
+  printf '%s' "$1" | sed -n 's/.*"status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1
+}
+
+emit_deep_check_json() {
+  local executed="$1"
+  local status="$2"
+  local exit_code="$3"
+  local reported_status="$4"
+  local reason="$5"
+
+  printf '{"executed":%s,"status":"%s","exit_code":%s' \
+    "$executed" \
+    "$(json_escape "$status")" \
+    "$exit_code"
+  if [ -n "$reported_status" ]; then
+    printf ',"reported_status":"%s"' "$(json_escape "$reported_status")"
+  fi
+  if [ -n "$reason" ]; then
+    printf ',"reason":"%s"' "$(json_escape "$reason")"
+  fi
+  printf '}'
+}
+
+emit_deep_checks_json() {
+  printf '{'
+  printf '"architecture_lint":'
+  emit_deep_check_json "$DEEP_ARCH_EXECUTED" "$DEEP_ARCH_STATUS" "$DEEP_ARCH_EXIT_CODE" "$DEEP_ARCH_REPORTED_STATUS" "$DEEP_ARCH_REASON"
+  printf ','
+  printf '"spec_validation":'
+  emit_deep_check_json "$DEEP_SPEC_EXECUTED" "$DEEP_SPEC_STATUS" "$DEEP_SPEC_EXIT_CODE" "$DEEP_SPEC_REPORTED_STATUS" "$DEEP_SPEC_REASON"
+  printf '}'
+}
+
+snapshot_deep_fields_json() {
+  if [ "$DEEP_MODE" != "true" ]; then
+    return
+  fi
+
+  printf ',\n  "deep_mode": true,\n  "deep_checks": %s' "$(emit_deep_checks_json)"
 }
 
 ci_files() {
@@ -451,6 +542,69 @@ score_security_governance() {
   fi
 }
 
+run_deep_checks() {
+  local arch_output=""
+  local arch_status=0
+  local spec_output=""
+  local spec_status=0
+
+  if [ "$DEEP_MODE" != "true" ]; then
+    return
+  fi
+
+  if [ -f scripts/lint-architecture.sh ]; then
+    DEEP_ARCH_EXECUTED="true"
+    DEEP_ARCH_REASON=""
+    capture_command_output bash scripts/lint-architecture.sh
+    arch_output="$CAPTURE_OUTPUT"
+    arch_status="$CAPTURE_STATUS"
+    DEEP_ARCH_EXIT_CODE="$arch_status"
+    DEEP_ARCH_REPORTED_STATUS="$(reported_status_from_output "$arch_output")"
+    if [ "$arch_status" -eq 0 ]; then
+      case "$DEEP_ARCH_REPORTED_STATUS" in
+        warnings|warning)
+          DEEP_ARCH_STATUS="warnings"
+          ARCH_DETAILS="$(append_detail "$ARCH_DETAILS" "Deep architecture lint execution reported warnings")"
+          ;;
+        ""|passed)
+          DEEP_ARCH_STATUS="passed"
+          ARCH_DETAILS="$(append_detail "$ARCH_DETAILS" "Deep architecture lint execution passed")"
+          ;;
+        *)
+          DEEP_ARCH_STATUS="$DEEP_ARCH_REPORTED_STATUS"
+          ARCH_DETAILS="$(append_detail "$ARCH_DETAILS" "Deep architecture lint execution reported status: $DEEP_ARCH_REPORTED_STATUS")"
+          ;;
+      esac
+    else
+      DEEP_ARCH_STATUS="failed"
+      ARCH_DETAILS="$(append_detail "$ARCH_DETAILS" "Deep architecture lint execution failed")"
+      ARCH_FIX="Fix the reported architecture lint violations before relying on the current boundary policy."
+    fi
+  else
+    DEEP_ARCH_REASON="missing_script"
+  fi
+
+  if [ -f scripts/validate-spec.sh ]; then
+    DEEP_SPEC_EXECUTED="true"
+    DEEP_SPEC_REASON=""
+    capture_command_output bash scripts/validate-spec.sh --json
+    spec_output="$CAPTURE_OUTPUT"
+    spec_status="$CAPTURE_STATUS"
+    DEEP_SPEC_EXIT_CODE="$spec_status"
+    DEEP_SPEC_REPORTED_STATUS="$(reported_status_from_output "$spec_output")"
+    if [ "$spec_status" -eq 0 ]; then
+      DEEP_SPEC_STATUS="passed"
+      DOC_DETAILS="$(append_detail "$DOC_DETAILS" "Deep spec validation execution passed")"
+    else
+      DEEP_SPEC_STATUS="failed"
+      DOC_DETAILS="$(append_detail "$DOC_DETAILS" "Deep spec validation execution failed")"
+      DOC_FIX="Fix the reported spec validation issues and keep harness/docs plus harness/.harness policies aligned."
+    fi
+  else
+    DEEP_SPEC_REASON="missing_script"
+  fi
+}
+
 calculate_overall() {
   OVERALL_SCORE=$(( \
     ENTRY_SCORE * 15 + \
@@ -584,7 +738,7 @@ write_last_audit_snapshot() {
   "overall_score": $OVERALL_SCORE,
   "maturity_level": $MATURITY_LEVEL,
   "maturity_label": "$(json_escape "$MATURITY_LABEL")",
-  "priority_fixes": $priority_fixes_json
+  "priority_fixes": $priority_fixes_json$(snapshot_deep_fields_json)
 }
 EOF
   LAST_AUDIT_WRITTEN=1
@@ -599,6 +753,7 @@ output_report() {
   printf '"overall_score":%s,' "$OVERALL_SCORE"
   printf '"maturity_level":%s,' "$MATURITY_LEVEL"
   printf '"maturity_label":"%s",' "$(json_escape "$MATURITY_LABEL")"
+  printf '"deep_mode":%s,' "$DEEP_MODE"
   printf '"dimensions":{'
   printf '"entry_document":'
   emit_entry_dimension
@@ -630,12 +785,18 @@ output_report() {
   else
     printf 'null,'
   fi
+  if [ "$DEEP_MODE" = "true" ]; then
+    printf '"deep_checks":'
+    emit_deep_checks_json
+    printf ','
+  fi
   printf '"priority_fixes":'
   printf '%s' "$priority_fixes_json"
   printf '}\n'
 }
 
 main() {
+  parse_args "$@"
   score_entry_document
   score_doc_structure
   score_doc_freshness
@@ -644,6 +805,7 @@ main() {
   score_automation
   score_exec_plans
   score_security_governance
+  run_deep_checks
   calculate_overall
   write_last_audit_snapshot "$(emit_priority_fixes)"
   output_report

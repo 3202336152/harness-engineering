@@ -475,4 +475,60 @@ assert_success "$status" "audit handles spaced markdown paths"
 assert_json_field "$output" '.dimensions.doc_freshness.details | map(select(startswith("harness/docs/project/项目 架构 v2.md is stale"))) | length > 0' "true"
 teardown_test_dir
 
+it "runs deep harness checks when --deep is requested"
+setup_test_dir
+init_git_repo
+seed_project_level_spec_project
+cat > scripts/lint-architecture.sh <<'EOF'
+#!/bin/bash
+printf '{"status":"violations","violations":[{"message":"broken-boundary"}]}\n'
+exit 1
+EOF
+chmod +x scripts/lint-architecture.sh
+cat > scripts/validate-spec.sh <<'EOF'
+#!/bin/bash
+printf '{"status":"passed"}\n'
+EOF
+chmod +x scripts/validate-spec.sh
+git add -A >/dev/null 2>&1
+git commit -m "seed deep audit project" --quiet >/dev/null 2>&1
+output=$(bash "$REPO_ROOT/scripts/audit-harness.sh" --deep 2>&1)
+status=$?
+assert_success "$status" "deep audit reports without exiting non-zero"
+assert_json_field "$output" ".status" "completed"
+assert_json_field "$output" ".deep_mode" "true"
+assert_json_field "$output" ".deep_checks.architecture_lint.executed" "true"
+assert_json_field "$output" ".deep_checks.architecture_lint.status" "failed"
+assert_json_field "$output" ".deep_checks.spec_validation.executed" "true"
+assert_json_field "$output" ".deep_checks.spec_validation.status" "passed"
+assert_json_field "$output" '.dimensions.architecture_constraints.details | map(select(contains("Deep architecture lint execution failed"))) | length > 0' "true"
+teardown_test_dir
+
+it "preserves warning-level deep architecture lint results"
+setup_test_dir
+init_git_repo
+seed_project_level_spec_project
+cat > scripts/lint-architecture.sh <<'EOF'
+#!/bin/bash
+printf '{"status":"warnings","violations":[{"message":"soft-boundary-warning"}]}\n'
+exit 0
+EOF
+chmod +x scripts/lint-architecture.sh
+cat > scripts/validate-spec.sh <<'EOF'
+#!/bin/bash
+printf '{"status":"passed"}\n'
+EOF
+chmod +x scripts/validate-spec.sh
+git add -A >/dev/null 2>&1
+git commit -m "seed warning deep audit project" --quiet >/dev/null 2>&1
+output=$(bash "$REPO_ROOT/scripts/audit-harness.sh" --deep 2>&1)
+status=$?
+assert_success "$status" "deep audit succeeds when architecture lint only reports warnings"
+assert_json_field "$output" ".status" "completed"
+assert_json_field "$output" ".deep_checks.architecture_lint.executed" "true"
+assert_json_field "$output" ".deep_checks.architecture_lint.status" "warnings"
+assert_json_field "$output" ".deep_checks.architecture_lint.reported_status" "warnings"
+assert_json_field "$output" '.dimensions.architecture_constraints.details | map(select(contains("Deep architecture lint execution reported warnings"))) | length > 0' "true"
+teardown_test_dir
+
 print_summary

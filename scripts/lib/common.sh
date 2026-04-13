@@ -4,11 +4,40 @@
 
 json_escape() {
   local text="$1"
+  local escaped=""
+  local index=0
+  local char=""
+  local replacement=""
+
+  if command -v jq >/dev/null 2>&1; then
+    escaped="$(printf '%s' "$text" | jq -Rsa .)"
+    escaped="${escaped#\"}"
+    escaped="${escaped%\"}"
+    printf '%s' "$escaped"
+    return 0
+  fi
+
   text=${text//\\/\\\\}
   text=${text//\"/\\\"}
+  text=${text//$'\b'/\\b}
+  text=${text//$'\f'/\\f}
   text=${text//$'\n'/\\n}
   text=${text//$'\r'/\\r}
   text=${text//$'\t'/\\t}
+
+  while [ "$index" -le 31 ]; do
+    case "$index" in
+      8|9|10|12|13)
+        index=$((index + 1))
+        continue
+        ;;
+    esac
+    printf -v char '%b' "\\x$(printf '%02x' "$index")"
+    printf -v replacement '\\u%04x' "$index"
+    text=${text//"$char"/$replacement}
+    index=$((index + 1))
+  done
+
   printf '%s' "$text"
 }
 

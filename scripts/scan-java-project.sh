@@ -22,6 +22,14 @@ JOBS=()
 CLIENTS=()
 APPLICATION_SERVICES=()
 DOMAIN_SERVICES=()
+REPOSITORIES=()
+COMPONENTS=()
+CONFIGURATIONS=()
+CONTROLLER_ADVICES=()
+ASPECTS=()
+PROPERTIES_BINDINGS=()
+EVENT_LISTENERS=()
+BEAN_METHODS=()
 RECOMMENDED_READS=()
 
 # shellcheck source=scripts/lib/common.sh
@@ -219,6 +227,45 @@ has_java_annotation() {
   ' "$path"
 }
 
+bean_method_names() {
+  local path="$1"
+
+  awk '
+    {
+      line=$0
+      sub(/[[:space:]]*\/\/.*$/, "", line)
+      if (line ~ /^[[:space:]]*@Bean(\(|[[:space:]]|$)/) {
+        pending=1
+        next
+      }
+      if (pending != 1) {
+        next
+      }
+      if (line ~ /^[[:space:]]*$/) {
+        next
+      }
+      if (line ~ /^[[:space:]]*@/) {
+        next
+      }
+      if (index(line, "(") > 0) {
+        signature=line
+        sub(/\(.*/, "", signature)
+        gsub(/[[:space:]]+/, " ", signature)
+        sub(/^ /, "", signature)
+        sub(/ $/, "", signature)
+        if (signature != "") {
+          count=split(signature, parts, " ")
+          name=parts[count]
+          if (name != "if" && name != "for" && name != "while" && name != "switch" && name != "catch" && name != "return" && name != "new") {
+            print name
+            pending=0
+          }
+        }
+      }
+    }
+  ' "$path"
+}
+
 discover_build_files() {
   local path=""
   local build_path=""
@@ -360,6 +407,41 @@ classify_java_file() {
   if [[ "$class_name" == *DomainService ]] || [[ "$path" == */domain/* && "$class_name" == *Service ]]; then
     append_named_path "DOMAIN_SERVICES" "$class_name" "$path"
   fi
+
+  if [[ "$class_name" == *Repository ]] || [[ "$class_name" == *Mapper ]] || has_java_annotation "$path" 'Repository|Mapper'; then
+    append_named_path "REPOSITORIES" "$class_name" "$path"
+  fi
+
+  if has_java_annotation "$path" 'Component'; then
+    append_named_path "COMPONENTS" "$class_name" "$path"
+  fi
+
+  if [[ "$class_name" == *Configuration ]] || has_java_annotation "$path" 'Configuration'; then
+    append_named_path "CONFIGURATIONS" "$class_name" "$path"
+  fi
+
+  if has_java_annotation "$path" 'ControllerAdvice'; then
+    append_named_path "CONTROLLER_ADVICES" "$class_name" "$path"
+  fi
+
+  if has_java_annotation "$path" 'Aspect'; then
+    append_named_path "ASPECTS" "$class_name" "$path"
+  fi
+
+  if has_java_annotation "$path" 'ConfigurationProperties'; then
+    append_named_path "PROPERTIES_BINDINGS" "$class_name" "$path"
+  fi
+
+  if has_java_annotation "$path" 'EventListener'; then
+    append_named_path "EVENT_LISTENERS" "$class_name" "$path"
+  fi
+
+  while IFS= read -r bean_method_name; do
+    [ -n "$bean_method_name" ] || continue
+    append_named_path "BEAN_METHODS" "$bean_method_name" "$path"
+  done <<EOF
+$(bean_method_names "$path")
+EOF
 }
 
 discover_java_inventory() {
@@ -415,6 +497,30 @@ emit_json() {
   printf ','
   printf '"domain_services":'
   emit_named_path_json "DOMAIN_SERVICES"
+  printf ','
+  printf '"repositories":'
+  emit_named_path_json "REPOSITORIES"
+  printf ','
+  printf '"components":'
+  emit_named_path_json "COMPONENTS"
+  printf ','
+  printf '"configurations":'
+  emit_named_path_json "CONFIGURATIONS"
+  printf ','
+  printf '"controller_advices":'
+  emit_named_path_json "CONTROLLER_ADVICES"
+  printf ','
+  printf '"aspects":'
+  emit_named_path_json "ASPECTS"
+  printf ','
+  printf '"properties_bindings":'
+  emit_named_path_json "PROPERTIES_BINDINGS"
+  printf ','
+  printf '"event_listeners":'
+  emit_named_path_json "EVENT_LISTENERS"
+  printf ','
+  printf '"bean_methods":'
+  emit_named_path_json "BEAN_METHODS"
   printf '},'
   printf '"recommended_reads":'
   append_array_json "${RECOMMENDED_READS[@]-}"
