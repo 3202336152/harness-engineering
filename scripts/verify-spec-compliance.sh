@@ -2,8 +2,14 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SKILL_FILE="${1:-SKILL.md}"
 ERRORS=0
+
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+
+exit_if_version_flag "${1:-}"
 
 fail() {
   printf 'FAIL: %s\n' "$1"

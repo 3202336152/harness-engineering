@@ -29,6 +29,8 @@ ENTRY_TOOLS=()
 CUSTOM_ENTRY_FILES=()
 RESOLVED_ENTRY_FILES=()
 
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
 # shellcheck source=scripts/lib/template-resolver.sh
 . "$SCRIPT_DIR/lib/template-resolver.sh"
 # shellcheck source=scripts/lib/template-profile.sh
@@ -39,6 +41,8 @@ RESOLVED_ENTRY_FILES=()
 . "$SCRIPT_DIR/lib/doc-paths.sh"
 # shellcheck source=scripts/lib/entry-docs.sh
 . "$SCRIPT_DIR/lib/entry-docs.sh"
+
+exit_if_version_flag "${1:-}"
 
 CREATED_FILES=()
 CREATED_DIRS=()
@@ -173,33 +177,6 @@ strict_default_value() {
   else
     printf 'false'
   fi
-}
-
-append_array_json() {
-  local first=1
-  local item
-  printf '['
-  for item in "$@"; do
-    if [ -z "$item" ]; then
-      continue
-    fi
-    if [ "$first" -eq 0 ]; then
-      printf ','
-    fi
-    first=0
-    printf '"%s"' "$(json_escape "$item")"
-  done
-  printf ']'
-}
-
-json_escape() {
-  local text="$1"
-  text=${text//\\/\\\\}
-  text=${text//\"/\\\"}
-  text=${text//$'\n'/\\n}
-  text=${text//$'\r'/\\r}
-  text=${text//$'\t'/\\t}
-  printf '%s' "$text"
 }
 
 append_tracked_array_json() {

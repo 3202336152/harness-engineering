@@ -2,39 +2,19 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 OUTPUT_JSON=0
 MISSING=()
+
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+
+exit_if_version_flag "${1:-}"
 
 usage() {
   cat <<'EOF'
 Usage: check-runtime-deps.sh [--json]
 EOF
-}
-
-json_escape() {
-  local text="$1"
-  text=${text//\\/\\\\}
-  text=${text//\"/\\\"}
-  text=${text//$'\n'/\\n}
-  text=${text//$'\r'/\\r}
-  text=${text//$'\t'/\\t}
-  printf '%s' "$text"
-}
-
-append_array_json() {
-  local first=1
-  local item
-
-  printf '['
-  for item in "$@"; do
-    [ -n "$item" ] || continue
-    if [ "$first" -eq 0 ]; then
-      printf ','
-    fi
-    first=0
-    printf '"%s"' "$(json_escape "$item")"
-  done
-  printf ']'
 }
 
 parse_args() {

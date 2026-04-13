@@ -4,38 +4,17 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
 # shellcheck source=scripts/lib/doc-paths.sh
 . "$SCRIPT_DIR/lib/doc-paths.sh"
+
+exit_if_version_flag "${1:-}"
 
 FEATURE_ID=""
 FEATURE_DIR=""
 CONFIG_PATH="harness/.harness/spec-policy.json"
 OUTPUT_JSON=0
-
-json_escape() {
-  local text="$1"
-  text=${text//\\/\\\\}
-  text=${text//\"/\\\"}
-  text=${text//$'\n'/\\n}
-  text=${text//$'\r'/\\r}
-  text=${text//$'\t'/\\t}
-  printf '%s' "$text"
-}
-
-append_array_json() {
-  local first=1
-  local item
-  printf '['
-  for item in "$@"; do
-    [ -n "$item" ] || continue
-    if [ "$first" -eq 0 ]; then
-      printf ','
-    fi
-    first=0
-    printf '"%s"' "$(json_escape "$item")"
-  done
-  printf ']'
-}
 
 usage() {
   cat <<'EOF'
@@ -72,13 +51,6 @@ parse_args() {
         ;;
     esac
   done
-}
-
-require_jq() {
-  if ! command -v jq >/dev/null 2>&1; then
-    printf '{"status":"error","error":"jq is required for check-rollback-readiness.sh"}\n'
-    exit 1
-  fi
 }
 
 resolve_feature_dir() {

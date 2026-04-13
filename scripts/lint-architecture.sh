@@ -2,18 +2,14 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_PATH="harness/.harness/architecture.json"
 SRC_ROOTS=()
 
-json_escape() {
-  local text="$1"
-  text=${text//\\/\\\\}
-  text=${text//\"/\\\"}
-  text=${text//$'\n'/\\n}
-  text=${text//$'\r'/\\r}
-  text=${text//$'\t'/\\t}
-  printf '%s' "$text"
-}
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+
+exit_if_version_flag "${1:-}"
 
 usage() {
   cat <<'EOF'
@@ -38,13 +34,6 @@ parse_args() {
         ;;
     esac
   done
-}
-
-require_jq() {
-  if ! command -v jq >/dev/null 2>&1; then
-    printf '{"status":"error","error":"jq is required for lint-architecture.sh"}\n'
-    exit 1
-  fi
 }
 
 layer_index() {

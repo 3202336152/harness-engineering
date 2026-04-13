@@ -4,10 +4,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
 # shellcheck source=scripts/lib/doc-paths.sh
 . "$SCRIPT_DIR/lib/doc-paths.sh"
 # shellcheck source=scripts/lib/entry-docs.sh
 . "$SCRIPT_DIR/lib/entry-docs.sh"
+
+exit_if_version_flag "${1:-}"
 
 ENTRY_SCORE=0
 ENTRY_LINE_COUNT=0
@@ -62,16 +66,6 @@ append_detail() {
   else
     printf '%s' "$2"
   fi
-}
-
-json_escape() {
-  local text="$1"
-  text=${text//\\/\\\\}
-  text=${text//\"/\\\"}
-  text=${text//$'\n'/\\n}
-  text=${text//$'\r'/\\r}
-  text=${text//$'\t'/\\t}
-  printf '%s' "$text"
 }
 
 file_timestamp() {

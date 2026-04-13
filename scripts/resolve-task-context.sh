@@ -4,10 +4,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
 # shellcheck source=scripts/lib/doc-paths.sh
 . "$SCRIPT_DIR/lib/doc-paths.sh"
 # shellcheck source=scripts/lib/stack-detect.sh
 . "$SCRIPT_DIR/lib/stack-detect.sh"
+
+exit_if_version_flag "${1:-}"
 
 TASK=""
 FEATURE_ID=""
@@ -22,44 +26,6 @@ REQUIRED_CONTEXT=()
 RECOMMENDED_CONTEXT=()
 VERIFICATION_STEPS=()
 CHANGE_TYPES=()
-
-json_escape() {
-  local text="$1"
-  text=${text//\\/\\\\}
-  text=${text//\"/\\\"}
-  text=${text//$'\n'/\\n}
-  text=${text//$'\r'/\\r}
-  text=${text//$'\t'/\\t}
-  printf '%s' "$text"
-}
-
-append_array_json() {
-  local first=1
-  local item
-  printf '['
-  for item in "$@"; do
-    [ -n "$item" ] || continue
-    if [ "$first" -eq 0 ]; then
-      printf ','
-    fi
-    first=0
-    printf '"%s"' "$(json_escape "$item")"
-  done
-  printf ']'
-}
-
-append_safe_array_json() {
-  local array_name="$1"
-  local length=0
-
-  eval "length=\${#${array_name}[@]}"
-  if [ "$length" -eq 0 ]; then
-    printf '[]'
-    return
-  fi
-
-  eval "append_array_json \"\${${array_name}[@]}\""
-}
 
 append_unique() {
   local value="$1"
@@ -166,13 +132,6 @@ parse_args() {
 
   if [ -z "$TASK" ]; then
     printf '{"status":"error","error":"Missing required --task"}\n'
-    exit 1
-  fi
-}
-
-require_jq() {
-  if ! command -v jq >/dev/null 2>&1; then
-    printf '{"status":"error","error":"jq is required for resolve-task-context.sh"}\n'
     exit 1
   fi
 }

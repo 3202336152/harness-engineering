@@ -23,33 +23,12 @@ ORPHAN_OVERRIDES=()
 DOCS_CHECKED=0
 OVERRIDES_CHECKED=0
 
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
 # shellcheck source=scripts/lib/template-resolver.sh
 . "$SCRIPT_DIR/lib/template-resolver.sh"
 
-json_escape() {
-  local text="$1"
-  text=${text//\\/\\\\}
-  text=${text//\"/\\\"}
-  text=${text//$'\n'/\\n}
-  text=${text//$'\r'/\\r}
-  text=${text//$'\t'/\\t}
-  printf '%s' "$text"
-}
-
-append_array_json() {
-  local first=1
-  local item
-  printf '['
-  for item in "$@"; do
-    [ -n "$item" ] || continue
-    if [ "$first" -eq 0 ]; then
-      printf ','
-    fi
-    first=0
-    printf '"%s"' "$(json_escape "$item")"
-  done
-  printf ']'
-}
+exit_if_version_flag "${1:-}"
 
 usage() {
   cat <<'EOF'
@@ -82,13 +61,6 @@ parse_args() {
         ;;
     esac
   done
-}
-
-require_jq() {
-  if ! command -v jq >/dev/null 2>&1; then
-    printf '{"status":"error","error":"jq is required for check-template-drift.sh"}\n'
-    exit 1
-  fi
 }
 
 has_frontmatter() {

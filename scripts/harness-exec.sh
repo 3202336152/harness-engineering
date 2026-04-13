@@ -3,6 +3,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+
+exit_if_version_flag "${1:-}"
+
 MODE="${1:-}"
 shift || true
 
@@ -33,16 +39,6 @@ RESOLVED_FEATURE_DIR=""
 RESOLVED_TASK=""
 RESOLVED_TITLE=""
 TEMP_FILES=()
-
-json_escape() {
-  local text="$1"
-  text=${text//\\/\\\\}
-  text=${text//\"/\\\"}
-  text=${text//$'\n'/\\n}
-  text=${text//$'\r'/\\r}
-  text=${text//$'\t'/\\t}
-  printf '%s' "$text"
-}
 
 cleanup_temp_files() {
   local path=""
@@ -180,13 +176,6 @@ parse_args() {
         ;;
     esac
   done
-}
-
-require_jq() {
-  if ! command -v jq >/dev/null 2>&1; then
-    printf '{"status":"error","error":"jq is required for harness-exec.sh"}\n'
-    exit 1
-  fi
 }
 
 run_json_command() {

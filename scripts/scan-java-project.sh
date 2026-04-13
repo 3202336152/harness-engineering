@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 OUTPUT_JSON=1
 OUTPUT_PATH="harness/.harness/runtime/java-doc-scan.json"
 STACK="unknown"
@@ -23,15 +24,10 @@ APPLICATION_SERVICES=()
 DOMAIN_SERVICES=()
 RECOMMENDED_READS=()
 
-json_escape() {
-  local text="$1"
-  text=${text//\\/\\\\}
-  text=${text//\"/\\\"}
-  text=${text//$'\n'/\\n}
-  text=${text//$'\r'/\\r}
-  text=${text//$'\t'/\\t}
-  printf '%s' "$text"
-}
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+
+exit_if_version_flag "${1:-}"
 
 append_unique() {
   local value="$1"
@@ -66,21 +62,6 @@ append_named_path() {
   [ -n "$path" ] || return 0
   append_unique_to_array "$array_name" "$name|$path"
   append_unique_to_array "RECOMMENDED_READS" "$path"
-}
-
-append_array_json() {
-  local first=1
-  local item
-  printf '['
-  for item in "$@"; do
-    [ -n "$item" ] || continue
-    if [ "$first" -eq 0 ]; then
-      printf ','
-    fi
-    first=0
-    printf '"%s"' "$(json_escape "$item")"
-  done
-  printf ']'
 }
 
 emit_named_path_json() {

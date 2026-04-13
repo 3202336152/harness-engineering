@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RULES_PATH="harness/.harness/doc-impact-rules.json"
 OUTPUT_JSON=0
 USE_STAGED=0
@@ -17,42 +18,10 @@ SATISFIED_RULES=()
 VIOLATIONS=()
 SUGGESTED_ACTIONS=()
 
-json_escape() {
-  local text="$1"
-  text=${text//\\/\\\\}
-  text=${text//\"/\\\"}
-  text=${text//$'\n'/\\n}
-  text=${text//$'\r'/\\r}
-  text=${text//$'\t'/\\t}
-  printf '%s' "$text"
-}
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
 
-append_array_json() {
-  local first=1
-  local item
-  printf '['
-  for item in "$@"; do
-    [ -n "$item" ] || continue
-    if [ "$first" -eq 0 ]; then
-      printf ','
-    fi
-    first=0
-    printf '"%s"' "$(json_escape "$item")"
-  done
-  printf ']'
-}
-
-safe_array_json() {
-  local array_name="$1"
-  local length=0
-
-  eval "length=\${#${array_name}[@]}"
-  if [ "$length" -eq 0 ]; then
-    printf '[]'
-  else
-    eval "append_array_json \"\${${array_name}[@]}\""
-  fi
-}
+exit_if_version_flag "${1:-}"
 
 usage() {
   cat <<'EOF'
@@ -101,13 +70,6 @@ parse_args() {
         ;;
     esac
   done
-}
-
-require_jq() {
-  if ! command -v jq >/dev/null 2>&1; then
-    printf '{"status":"error","error":"jq is required for check-doc-impact.sh"}\n'
-    exit 1
-  fi
 }
 
 require_git_repo() {

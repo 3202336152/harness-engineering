@@ -11,7 +11,7 @@ license: MIT
 compatibility: Requires bash, git, and jq. Works with any language or framework. Windows users should run it from WSL2 or another POSIX-compatible shell.
 metadata:
   author: "harness-engineering"
-  version: "1.0.0"
+  version: "1.1.0"
   tags: "harness-engineering,agent-environment,scaffolding,code-quality"
 allowed-tools: Bash(git:*) Read Write Edit Glob Grep
 ---

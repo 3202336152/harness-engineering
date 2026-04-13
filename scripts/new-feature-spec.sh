@@ -24,6 +24,8 @@ REQUIRED_DOCS=()
 RELATED_PROJECT_DOCS=()
 VERIFICATION_CHECKS=()
 
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
 # shellcheck source=scripts/lib/template-resolver.sh
 . "$SCRIPT_DIR/lib/template-resolver.sh"
 # shellcheck source=scripts/lib/template-profile.sh
@@ -31,30 +33,7 @@ VERIFICATION_CHECKS=()
 # shellcheck source=scripts/lib/doc-paths.sh
 . "$SCRIPT_DIR/lib/doc-paths.sh"
 
-json_escape() {
-  local text="$1"
-  text=${text//\\/\\\\}
-  text=${text//\"/\\\"}
-  text=${text//$'\n'/\\n}
-  text=${text//$'\r'/\\r}
-  text=${text//$'\t'/\\t}
-  printf '%s' "$text"
-}
-
-append_array_json() {
-  local first=1
-  local item
-  printf '['
-  for item in "$@"; do
-    [ -n "$item" ] || continue
-    if [ "$first" -eq 0 ]; then
-      printf ','
-    fi
-    first=0
-    printf '"%s"' "$(json_escape "$item")"
-  done
-  printf ']'
-}
+exit_if_version_flag "${1:-}"
 
 usage() {
   cat <<'EOF'
@@ -138,18 +117,6 @@ append_verification_check() {
   VERIFICATION_CHECKS+=("$check")
 }
 
-append_safe_array_json() {
-  local array_name="$1"
-  local length=0
-
-  eval "length=\${#${array_name}[@]}"
-  if [ "$length" -eq 0 ]; then
-    printf '[]'
-  else
-    eval "append_array_json \"\${${array_name}[@]}\""
-  fi
-}
-
 parse_args() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -194,13 +161,6 @@ parse_args() {
 
   if [ -z "$FEATURE_ID" ] || [ -z "$TITLE" ]; then
     printf '{"status":"error","error":"Missing required --id or --title"}\n'
-    exit 1
-  fi
-}
-
-require_jq() {
-  if ! command -v jq >/dev/null 2>&1; then
-    printf '{"status":"error","error":"jq is required for new-feature-spec.sh"}\n'
     exit 1
   fi
 }

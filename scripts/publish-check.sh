@@ -2,9 +2,15 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SKIP_OFFICIAL=0
 SMOKE_AGENTS="${HARNESS_PUBLISH_SMOKE_AGENTS:-codex,claude-code}"
+
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+
+exit_if_version_flag "${1:-}"
 
 usage() {
   cat <<'EOF'

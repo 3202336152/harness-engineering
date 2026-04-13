@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RUN_POLICY_PATH="harness/.harness/run-policy.json"
 CONTEXT_DIR="harness/.harness/runtime/context"
 RUNS_DIR="harness/.harness/runs"
@@ -15,30 +16,10 @@ PRUNED_CONTEXT=()
 PRUNED_RUNS=()
 PRUNED_EVIDENCE=()
 
-json_escape() {
-  local text="$1"
-  text=${text//\\/\\\\}
-  text=${text//\"/\\\"}
-  text=${text//$'\n'/\\n}
-  text=${text//$'\r'/\\r}
-  text=${text//$'\t'/\\t}
-  printf '%s' "$text"
-}
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
 
-append_array_json() {
-  local first=1
-  local item
-  printf '['
-  for item in "$@"; do
-    [ -n "$item" ] || continue
-    if [ "$first" -eq 0 ]; then
-      printf ','
-    fi
-    first=0
-    printf '"%s"' "$(json_escape "$item")"
-  done
-  printf ']'
-}
+exit_if_version_flag "${1:-}"
 
 usage() {
   cat <<'EOF'
@@ -91,13 +72,6 @@ parse_args() {
         ;;
     esac
   done
-}
-
-require_jq() {
-  if ! command -v jq >/dev/null 2>&1; then
-    printf '{"status":"error","error":"jq is required for harness-gc.sh"}\n'
-    exit 1
-  fi
 }
 
 file_mtime() {

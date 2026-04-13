@@ -30,6 +30,8 @@ TEMPLATE_PROFILE="generic"
 PROFILE_DESCRIPTION=""
 REQUIRE_HYDRATED_DOC_STATE=0
 
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
 # shellcheck source=scripts/lib/template-resolver.sh
 . "$SCRIPT_DIR/lib/template-resolver.sh"
 # shellcheck source=scripts/lib/template-profile.sh
@@ -39,42 +41,7 @@ REQUIRE_HYDRATED_DOC_STATE=0
 # shellcheck source=scripts/lib/doc-paths.sh
 . "$SCRIPT_DIR/lib/doc-paths.sh"
 
-json_escape() {
-  local text="$1"
-  text=${text//\\/\\\\}
-  text=${text//\"/\\\"}
-  text=${text//$'\n'/\\n}
-  text=${text//$'\r'/\\r}
-  text=${text//$'\t'/\\t}
-  printf '%s' "$text"
-}
-
-append_array_json() {
-  local first=1
-  local item
-  printf '['
-  for item in "$@"; do
-    [ -n "$item" ] || continue
-    if [ "$first" -eq 0 ]; then
-      printf ','
-    fi
-    first=0
-    printf '"%s"' "$(json_escape "$item")"
-  done
-  printf ']'
-}
-
-append_safe_array_json() {
-  local array_name="$1"
-  local length=0
-
-  eval "length=\${#${array_name}[@]}"
-  if [ "$length" -eq 0 ]; then
-    printf '[]'
-  else
-    eval "append_array_json \"\${${array_name}[@]}\""
-  fi
-}
+exit_if_version_flag "${1:-}"
 
 usage() {
   cat <<'EOF'
@@ -115,13 +82,6 @@ parse_args() {
         ;;
     esac
   done
-}
-
-require_jq() {
-  if ! command -v jq >/dev/null 2>&1; then
-    printf '{"status":"error","error":"jq is required for validate-spec.sh"}\n'
-    exit 1
-  fi
 }
 
 has_frontmatter() {

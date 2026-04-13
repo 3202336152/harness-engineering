@@ -9,18 +9,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GIT_REPO=0
 TIMESTAMP_SOURCE="git_history"
 
+# shellcheck source=scripts/lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
 # shellcheck source=scripts/lib/doc-paths.sh
 . "$SCRIPT_DIR/lib/doc-paths.sh"
 
-json_escape() {
-  local text="$1"
-  text=${text//\\/\\\\}
-  text=${text//\"/\\\"}
-  text=${text//$'\n'/\\n}
-  text=${text//$'\r'/\\r}
-  text=${text//$'\t'/\\t}
-  printf '%s' "$text"
-}
+exit_if_version_flag "${1:-}"
 
 usage() {
   cat <<'EOF'
